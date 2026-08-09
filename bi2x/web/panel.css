@@ -1,0 +1,272 @@
+/* Control panel: the controller is drawn as an OUTLINE, no fill: only the
+   controls themselves are solid. Real physical layout: VOL-L and VOL-R at the
+   outer edges, START between them, the four BT buttons in a row, FX-L and FX-R
+   offset into the gaps, headphone jack bottom left. */
+
+:root {
+  --fond: #080b12;
+  --carte: #111722;
+  --bord: #232c3d;
+  --trait: #35435c;
+  --texte: #e8edf6;
+  --attenue: #7d879e;
+  --cyan: #35e2f0;
+  --cyan-doux: rgba(53, 226, 240, .18);
+  --magenta: #ff4fa3;
+  --magenta-doux: rgba(255, 79, 163, .18);
+  --ambre: #ffab3d;
+  --ambre-doux: rgba(255, 171, 61, .18);
+  --alerte: #ff5f56;
+}
+
+* { box-sizing: border-box; }
+
+body {
+  margin: 0;
+  padding: 0 1.5rem 2rem;
+  background: var(--fond);
+  color: var(--texte);
+  font: 15px/1.55 "Segoe UI", system-ui, sans-serif;
+}
+
+/* ----------------------------------------------------------- barre haute */
+
+.barre {
+  display: flex; flex-wrap: wrap; align-items: center; gap: 1.5rem;
+  padding: 1.1rem 0; margin-bottom: 1.75rem;
+  border-bottom: 1px solid var(--bord);
+}
+.barre h1 { font-size: 1.05rem; margin: 0; font-weight: 600; letter-spacing: .04em; }
+.modele { color: var(--attenue); font-weight: 400; }
+
+.etat { display: flex; align-items: center; gap: .5rem; color: var(--attenue); font-size: .9rem; }
+.pastille {
+  width: 9px; height: 9px; border-radius: 50%;
+  background: var(--alerte); box-shadow: 0 0 0 4px rgba(255, 95, 86, .15);
+}
+.etat.en-ligne .pastille { background: var(--cyan); box-shadow: 0 0 0 4px var(--cyan-doux); }
+
+.mesures {
+  margin-left: auto; display: flex; gap: 1.5rem;
+  color: var(--attenue); font-size: .85rem; font-variant-numeric: tabular-nums;
+}
+.mesures b { color: var(--texte); font-weight: 600; }
+
+.alerte {
+  margin: 0 0 1.5rem; padding: .75rem 1rem; border-radius: 8px;
+  border: 1px solid var(--alerte); background: rgba(255, 95, 86, .1); color: var(--alerte);
+}
+
+/* ----------------------------------------------------------- mise en page */
+
+.colonnes {
+  display: grid; grid-template-columns: minmax(0, 1fr) 340px;
+  gap: 1.75rem; align-items: start; max-width: 1400px; margin: 0 auto;
+}
+@media (max-width: 1080px) { .colonnes { grid-template-columns: 1fr; } }
+
+/* ------------------------------------------------- contour du controleur */
+
+.plaque { position: relative; padding: 2.5rem 2rem 1.5rem; margin-bottom: 1.5rem; }
+
+.contour {
+  position: absolute; inset: 0; width: 100%; height: 100%;
+  pointer-events: none;
+}
+.silhouette {
+  fill: none; stroke: var(--trait); stroke-width: 2;
+  vector-effect: non-scaling-stroke;
+}
+.nervure {
+  fill: none; stroke: var(--bord); stroke-width: 1;
+  vector-effect: non-scaling-stroke;
+}
+
+.organes { position: relative; }
+
+.rangee-haute {
+  display: grid; grid-template-columns: 1fr auto 1fr;
+  align-items: start; justify-items: center; gap: 1rem; margin-bottom: 2rem;
+}
+.rangee-bt { display: flex; justify-content: center; gap: 1.15rem; margin-bottom: 1.5rem; }
+.rangee-fx { display: flex; justify-content: center; gap: 8.5rem; margin-bottom: 1.25rem; }
+
+.poste { display: flex; flex-direction: column; align-items: center; gap: .5rem; }
+.etiquette {
+  font-size: .72rem; letter-spacing: .16em; font-weight: 700;
+  color: var(--attenue); text-transform: uppercase;
+}
+
+/* ----------------------------------------------------------- volumes */
+
+.knob { text-align: center; width: 150px; }
+.knob h2 {
+  font-size: .72rem; letter-spacing: .16em; color: var(--attenue);
+  margin: .75rem 0 .25rem; font-weight: 700;
+}
+.cadran {
+  position: relative; width: 112px; height: 112px; margin: 0 auto;
+  border-radius: 50%; border: 2px solid var(--trait);
+  background: radial-gradient(circle at 50% 40%, #232c3c, #10161f 72%);
+  transition: border-color .12s, box-shadow .12s;
+}
+.knob.bouge .cadran { border-color: var(--cyan); box-shadow: 0 0 18px var(--cyan-doux); }
+.aiguille {
+  position: absolute; left: 50%; top: 50%;
+  width: 3px; height: 46px; margin-left: -1.5px;
+  background: linear-gradient(var(--cyan), rgba(53, 226, 240, .2));
+  border-radius: 2px; transform-origin: 50% 100%;
+  transform: translateY(-100%) rotate(0deg);
+}
+.moyeu {
+  position: absolute; left: 50%; top: 50%; width: 16px; height: 16px;
+  margin: -8px 0 0 -8px; border-radius: 50%;
+  background: linear-gradient(160deg, #cfd8e6, #7f8a9e);
+}
+.valeur { margin: 0; display: flex; justify-content: center; gap: .55rem; font-variant-numeric: tabular-nums; }
+.valeur .brut { font-size: 1.05rem; font-weight: 600; }
+.valeur .degres { color: var(--attenue); }
+
+/* ----------------------------------------------------------- boutons */
+
+.bouton {
+  border: 2px solid var(--trait); background: #10161f;
+  font: inherit; color: transparent; padding: 0;
+  transition: background .05s, border-color .05s, box-shadow .05s, transform .05s;
+}
+.bouton.bt { width: 92px; height: 92px; border-radius: 8px; }
+.bouton.fx { width: 96px; height: 44px; border-radius: 6px; }
+.bouton.start {
+  width: 74px; height: 74px; border-radius: 50%; margin-top: 1.5rem;
+  color: var(--attenue); font-size: .6rem; font-weight: 800; letter-spacing: .12em;
+}
+
+.bouton.actif { transform: translateY(2px); }
+.bouton.bt.actif {
+  background: var(--cyan-doux); border-color: var(--cyan);
+  box-shadow: 0 0 26px var(--cyan-doux), inset 0 0 22px var(--cyan-doux);
+}
+.bouton.fx.actif {
+  background: var(--magenta-doux); border-color: var(--magenta);
+  box-shadow: 0 0 22px var(--magenta-doux), inset 0 0 18px var(--magenta-doux);
+}
+.bouton.start.actif {
+  background: var(--ambre-doux); border-color: var(--ambre); color: var(--ambre);
+  box-shadow: 0 0 22px var(--ambre-doux);
+}
+
+.bas-plaque { display: flex; padding-left: .5rem; }
+.casque, .temoins li, .sorties li {
+  display: flex; align-items: center; gap: .5rem;
+  color: var(--attenue); font-size: .76rem; letter-spacing: .08em;
+}
+.led { width: 10px; height: 10px; border-radius: 3px; background: #1b2231; border: 1px solid var(--bord); flex: none; }
+.casque.actif, .temoins li.actif { color: var(--cyan); }
+.casque.actif .led, .temoins li.actif .led {
+  background: var(--cyan); border-color: var(--cyan); box-shadow: 0 0 10px var(--cyan-doux);
+}
+
+/* ----------------------------------------------------------- encarts */
+
+.bloc {
+  border: 1px solid var(--bord); border-radius: 12px;
+  background: var(--carte); padding: 1rem 1.1rem 1.1rem; margin-bottom: 1.25rem;
+}
+.bloc-titre { display: flex; align-items: center; gap: 1rem; margin-bottom: .8rem; }
+.bloc-titre h2 {
+  font-size: .74rem; letter-spacing: .14em; color: var(--attenue);
+  margin: 0; font-weight: 700; text-transform: uppercase;
+}
+.note { margin-left: auto; color: var(--attenue); font-size: .74rem; }
+.lien, .filtre { margin-left: auto; background: none; border: 0; color: var(--attenue); font: inherit; font-size: .78rem; cursor: pointer; }
+.lien:hover { color: var(--cyan); }
+.filtre { display: flex; align-items: center; gap: .35rem; cursor: pointer; }
+.aide { margin: .8rem 0 0; color: var(--attenue); font-size: .76rem; }
+
+.temoins, .sorties { list-style: none; margin: 0; padding: 0; }
+.temoins { display: flex; gap: 1.75rem; flex-wrap: wrap; }
+.sorties li { padding: .3rem 0; border-bottom: 1px solid rgba(35, 44, 61, .45); }
+.sorties li:last-child { border-bottom: 0; }
+.canal { margin-left: auto; color: #55607a; font-size: .72rem; letter-spacing: 0; }
+.output-name { letter-spacing: .04em; }
+.sorties li.allume .output-name { color: var(--cyan); }
+
+/* interrupteur */
+.bascule { position: relative; display: inline-flex; flex: none; cursor: pointer; }
+.bascule input { position: absolute; opacity: 0; width: 100%; height: 100%; margin: 0; cursor: pointer; }
+.glissiere {
+  width: 30px; height: 17px; border-radius: 9px;
+  background: #1b2231; border: 1px solid var(--bord); transition: background .12s, border-color .12s;
+}
+.glissiere::after {
+  content: ""; position: absolute; top: 3px; left: 3px;
+  width: 11px; height: 11px; border-radius: 50%;
+  background: #55607a; transition: transform .12s, background .12s;
+}
+.bascule input:checked + .glissiere { background: var(--cyan-doux); border-color: var(--cyan); }
+.bascule input:checked + .glissiere::after { transform: translateX(13px); background: var(--cyan); }
+
+.couleur-ligne { display: flex; align-items: center; gap: .6rem; margin-bottom: .7rem; color: var(--attenue); font-size: .78rem; }
+.couleur-ligne input[type=color] {
+  width: 34px; height: 24px; padding: 0; border: 1px solid var(--bord);
+  border-radius: 5px; background: none; cursor: pointer;
+}
+.couleur-ligne .lien { margin-left: auto; }
+
+/* ------------------------------------------- per-input tracking, full width */
+
+.defilable { overflow-x: auto; }
+
+.tableau { border-collapse: collapse; font-size: .82rem; font-variant-numeric: tabular-nums; }
+.tableau.transpose { width: 100%; min-width: 640px; }
+.tableau.transpose th, .tableau.transpose td { padding: .38rem .5rem; text-align: center; white-space: nowrap; }
+.tableau.transpose thead th { color: var(--attenue); font-size: .72rem; letter-spacing: .06em; }
+.tableau.transpose thead th:first-child,
+.tableau.transpose tbody th { text-align: left; color: var(--attenue); font-weight: 600; font-size: .74rem; }
+.tableau.transpose tbody td { border-top: 1px solid rgba(35, 44, 61, .6); }
+.tableau.transpose col.actif, .tableau.transpose td.actif { color: var(--cyan); }
+.tableau.transpose td.jamais { color: #4b5468; }
+.tableau.transpose th.actif { color: var(--cyan); }
+
+.tableau.serre { width: 100%; }
+.tableau.serre td { padding: .22rem .35rem; border-top: 1px solid rgba(35, 44, 61, .6); }
+.tableau .v { text-align: right; font-weight: 600; }
+.tableau .mono { font-family: ui-monospace, Consolas, monospace; font-size: .76rem; font-weight: 400; }
+
+/* ----------------------------------------------------------- vue brute */
+
+.bits { display: grid; grid-template-columns: repeat(14, 1fr); gap: 3px; margin-bottom: .9rem; }
+.bits i { height: 14px; border-radius: 2px; background: #161d2a; border: 1px solid var(--bord); }
+.bits i.connu { border-color: #3d4a63; }
+.bits i.bas { background: var(--cyan); border-color: var(--cyan); box-shadow: 0 0 8px var(--cyan-doux); }
+.bits i.connu.bas { background: var(--magenta); border-color: var(--magenta); box-shadow: 0 0 8px var(--magenta-doux); }
+/* Always reads 0 by construction: greyed out so it is not mistaken for an input. */
+.bits i.structurel, .bits i.structurel.bas { background: #262e3d; border-color: #303a4d; box-shadow: none; }
+
+/* ----------------------------------------------------------- journal */
+
+.journal { list-style: none; margin: 0; padding: 0; max-height: 300px; overflow-y: auto; font-size: .8rem; font-variant-numeric: tabular-nums; }
+.journal li { display: flex; gap: .6rem; padding: .22rem 0; border-bottom: 1px solid rgba(35, 44, 61, .45); }
+.journal .horodate { color: var(--attenue); min-width: 60px; }
+.journal .nom { font-weight: 600; min-width: 72px; }
+.journal .duree { margin-left: auto; color: var(--attenue); }
+.journal li.on .nom { color: var(--cyan); }
+.journal li.off .nom { color: var(--attenue); }
+
+.pied { max-width: 1400px; margin: 1.5rem auto 0; color: var(--attenue); font-size: .82rem; }
+.pied p { margin: 0; }
+
+/* Only two analog inputs are wired: channels 2 and 3 of the protocol reach no
+   connector on this cabinet. */
+.tableau .inutilise td { color: #4b5468; }
+
+.choix-port { display: flex; align-items: center; gap: .45rem; color: var(--attenue); font-size: .82rem; }
+.choix-port select {
+  background: var(--carte); color: var(--texte); font: inherit; font-size: .82rem;
+  border: 1px solid var(--bord); border-radius: 6px; padding: .18rem .4rem; cursor: pointer;
+}
+
+.alerte code {
+  font-family: ui-monospace, Consolas, monospace; font-size: .9em;
+  background: rgba(255, 95, 86, .14); padding: .1em .4em; border-radius: 4px;
+}

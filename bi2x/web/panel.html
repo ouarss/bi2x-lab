@@ -1,0 +1,171 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Cabinet panel, live view</title>
+<link rel="stylesheet" href="panel.css">
+</head>
+<body>
+
+<header class="barre">
+  <h1>Cabinet panel <span class="modele">live view</span></h1>
+  <div class="etat" id="lien"><span class="pastille"></span><span id="lien-txt">connecting…</span></div>
+  <label class="choix-port">
+    <span>Port</span>
+    <select id="port"></select>
+  </label>
+  <div class="mesures">
+    <span><b id="cadence">-</b> Hz</span>
+    <span><b id="trames">0</b> frames</span>
+    <span>CRC <b id="crc">-</b></span>
+  </div>
+</header>
+
+<p class="alerte" id="alerte" hidden></p>
+
+<div class="colonnes">
+
+  <main>
+
+    <div class="plaque">
+      <svg class="contour" viewBox="0 0 1000 500" preserveAspectRatio="none" aria-hidden="true">
+        <path class="silhouette" d="M211 66 L789 56 L1000 131 L852 473 L160 478 L17 119 Z"/>
+        <path class="nervure" d="M243 104 L757 96"/>
+        <path class="nervure" d="M96 160 L168 430 M904 152 L832 430"/>
+      </svg>
+
+      <div class="organes">
+        <div class="rangee-haute">
+          <div class="knob" id="knob-l">
+            <div class="cadran"><div class="aiguille"></div><div class="moyeu"></div></div>
+            <h2>VOL&#8209;L</h2>
+            <p class="valeur"><span class="brut">0</span><span class="degres">0°</span></p>
+          </div>
+
+          <button class="bouton start" id="btn-START" type="button" disabled>
+            <span>START</span>
+          </button>
+
+          <div class="knob" id="knob-r">
+            <div class="cadran"><div class="aiguille"></div><div class="moyeu"></div></div>
+            <h2>VOL&#8209;R</h2>
+            <p class="valeur"><span class="brut">0</span><span class="degres">0°</span></p>
+          </div>
+        </div>
+
+        <div class="rangee-bt">
+          <div class="poste"><span class="etiquette">BT&#8209;A</span>
+            <button class="bouton bt" id="btn-BT-A" type="button" disabled></button></div>
+          <div class="poste"><span class="etiquette">BT&#8209;B</span>
+            <button class="bouton bt" id="btn-BT-B" type="button" disabled></button></div>
+          <div class="poste"><span class="etiquette">BT&#8209;C</span>
+            <button class="bouton bt" id="btn-BT-C" type="button" disabled></button></div>
+          <div class="poste"><span class="etiquette">BT&#8209;D</span>
+            <button class="bouton bt" id="btn-BT-D" type="button" disabled></button></div>
+        </div>
+
+        <div class="rangee-fx">
+          <div class="poste"><span class="etiquette">FX&#8209;L</span>
+            <button class="bouton fx" id="btn-FX-L" type="button" disabled></button></div>
+          <div class="poste"><span class="etiquette">FX&#8209;R</span>
+            <button class="bouton fx" id="btn-FX-R" type="button" disabled></button></div>
+        </div>
+
+        <div class="bas-plaque">
+          <span class="casque" id="sys-HEADPHONE"><span class="led"></span>HEADPHONE</span>
+        </div>
+      </div>
+    </div>
+
+    <section class="bloc">
+      <div class="bloc-titre">
+        <h2>Per-input tracking</h2>
+        <button type="button" id="raz" class="lien">reset</button>
+      </div>
+      <div class="defilable">
+        <table class="tableau transpose" id="tableau">
+          <thead><tr><th>Input</th></tr></thead>
+          <tbody>
+            <tr data-ligne="appuis"><th>Presses</th></tr>
+            <tr data-ligne="dernier"><th>Last</th></tr>
+            <tr data-ligne="cumul"><th>Total</th></tr>
+          </tbody>
+        </table>
+      </div>
+    </section>
+
+  </main>
+
+  <aside class="suivi">
+
+    <section class="bloc">
+      <div class="bloc-titre">
+        <h2>Raw inputs</h2>
+        <span class="note">7 of 56 bits wired</span>
+      </div>
+      <div class="bits" id="bits"></div>
+      <table class="tableau serre">
+        <tbody>
+          <tr><td>Analog ch0 (VOL-L)</td><td class="v" id="ch0">0</td></tr>
+          <tr><td>Analog ch1 (VOL-R)</td><td class="v" id="ch1">0</td></tr>
+          <tr class="inutilise"><td>Analog ch2 (not wired)</td><td class="v" id="ch2">0</td></tr>
+          <tr class="inutilise"><td>Analog ch3 (not wired)</td><td class="v" id="ch3">0</td></tr>
+          <tr><td>Block header</td><td class="v mono" id="entete">-</td></tr>
+        </tbody>
+      </table>
+    </section>
+
+    <section class="bloc">
+      <div class="bloc-titre"><h2>Service inputs</h2></div>
+      <ul class="temoins">
+        <li id="sys-TEST"><span class="led"></span>TEST</li>
+        <li id="sys-SERVICE"><span class="led"></span>SERVICE</li>
+        <li id="sys-COIN"><span class="led"></span>COIN MECH</li>
+      </ul>
+    </section>
+
+    <section class="bloc">
+      <div class="bloc-titre">
+        <h2>Button lamps</h2>
+        <span class="note">12 V, CN11 OUTPUT_A</span>
+      </div>
+      <ul class="sorties" id="lamps"></ul>
+    </section>
+
+    <section class="bloc">
+      <div class="bloc-titre">
+        <h2>LED strips</h2>
+        <span class="note">data on CN18 OUTPUT_F</span>
+      </div>
+      <div class="couleur-ligne">
+        <label for="couleur">Test colour</label>
+        <input type="color" id="couleur" value="#35e2f0">
+        <button type="button" class="lien" id="tout-eteindre">all off</button>
+      </div>
+      <ul class="sorties" id="strips"></ul>
+      <p class="aide">Addressable strips, one data line each. Most are WS2812B running
+         at 5 V off the CN18 +5V_IN rail; a few are 12 V parts.</p>
+      <p class="aide" id="aide-sorties">Toggles are staged locally: the outbound
+         command is not implemented yet, so nothing is sent to the board.</p>
+    </section>
+
+    <section class="bloc">
+      <div class="bloc-titre">
+        <h2>Event log</h2>
+        <label class="filtre"><input type="checkbox" id="seulement-appuis"> press only</label>
+      </div>
+      <ol class="journal" id="journal"></ol>
+    </section>
+
+  </aside>
+</div>
+
+<footer class="pied">
+  <p>Turn each volume slowly through a full revolution: the needle should sweep 360°
+     without jumping, and the other volume must stay still.</p>
+</footer>
+
+<script src="panel.js"></script>
+</body>
+</html>
