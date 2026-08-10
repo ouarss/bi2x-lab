@@ -80,8 +80,11 @@ the knob really moved that fast, and the whole travel is taken at once.
 Pacing a reader on Windows deserves the same caution. `Sleep(0)` hands the thread to
 the scheduler, which returns it a quantum later: a loop asking for 300 Hz that way ran
 at 68, adding fifteen milliseconds of latency to every input. `Sleep(1)` is only worth
-anything with the system timer raised to a millisecond, and the last millisecond has
-to be spun out.
+anything with the system timer raised to a millisecond, and even then it cannot wake
+mid-millisecond. Spinning out the remainder works but burns a third of a core; a
+high-resolution waitable timer (`CreateWaitableTimerExW` with
+`CREATE_WAITABLE_TIMER_HIGH_RESOLUTION`, Windows 10 1803+) waits it out without
+spinning, and is what the production reader settled on.
 
 ### Deobfuscation
 
