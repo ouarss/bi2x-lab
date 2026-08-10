@@ -40,23 +40,23 @@ state = {"connected": False, "error": None, "buttons": {n: False for n in BUTTON
         "gradL": 0, "gradR": 0, "turnsL": 0.0, "turnsR": 0.0}
 # Per-input tracking: press count, cumulative hold time, last hold time.
 tracking = {n: {"presses": 0, "total_ms": 0, "last_ms": 0} for n in ALL_INPUTS}
-events = deque(maxlen=400)      # {seq, t, entree, state, duree_ms}
+events = deque(maxlen=400)      # {seq, t, input, active, duration_ms}
 desired_outputs = {}                # channel -> bool (intent only, never emitted)
 test_colour = "#35e2f0"
 _sequence = 0
-_held_since = {}                        # entree -> instant du front montant
+_held_since = {}                        # input -> instant of the rising edge
 lock = threading.Lock()
 stop = threading.Event()
 started_at = time.time()
 worker_thread = None
 
 
-def _log_edge(name, actif, now):
+def _log_edge(name, active, now):
     """Log an edge and update the tracking counters. Called under the lock."""
     global _sequence
     _sequence += 1
     duration = 0
-    if actif:
+    if active:
         _held_since[name] = now
         tracking[name]["presses"] += 1
     elif name in _held_since:
@@ -64,7 +64,7 @@ def _log_edge(name, actif, now):
         tracking[name]["total_ms"] += duration
         tracking[name]["last_ms"] = duration
     events.append({"seq": _sequence, "t": round(now - started_at, 3),
-                       "input": name, "active": actif, "duration_ms": duration})
+                       "input": name, "active": active, "duration_ms": duration})
 
 
 # USB identity of the board, when the adapter reports one. Ports that match are
@@ -212,14 +212,28 @@ class Handler(BaseHTTPRequestHandler):
     def log_message(self, *a):
         pass
 
+    # The page may be opened from another origin (a local web server, or the file
+    # itself); without CORS it could not reach the panel server at all. But `*`
+    # would also let any random website read the panel state and switch the
+    # serial port, so only local origins (and file://, which sends "null") are
+    # echoed back.
+    def _cors_origin(self):
+        origin = self.headers.get("Origin")
+        if not origin:
+            return None
+        if origin == "null" or origin.startswith(("http://127.0.0.1",
+                                                  "http://localhost")):
+            return origin
+        return None
+
     def _send(self, code, body, mime):
         self.send_response(code)
         self.send_header("Content-Type", mime)
         self.send_header("Content-Length", str(len(body)))
         self.send_header("Cache-Control", "no-store")
-        # The page may be opened from another origin; without this it could not
-        # reach the panel server at all.
-        self.send_header("Access-Control-Allow-Origin", "*")
+        origin = self._cors_origin()
+        if origin:
+            self.send_header("Access-Control-Allow-Origin", origin)
         self.end_headers()
         self.wfile.write(body)
 
@@ -269,7 +283,9 @@ class Handler(BaseHTTPRequestHandler):
 
     def do_OPTIONS(self):
         self.send_response(204)
-        self.send_header("Access-Control-Allow-Origin", "*")
+        origin = self._cors_origin()
+        if origin:
+            self.send_header("Access-Control-Allow-Origin", origin)
         self.send_header("Access-Control-Allow-Headers", "Content-Type")
         self.send_header("Access-Control-Allow-Methods", "GET, POST, OPTIONS")
         self.end_headers()
@@ -279,7 +295,7 @@ class Handler(BaseHTTPRequestHandler):
 
         Nothing is sent to the board: outbound frames are not implemented yet. The
         intent is stored so the interface is already wired for the day writing works,
-        and `supporte: false` says so plainly rather than pretending to drive.
+        and `supported: false` says so plainly rather than pretending to drive.
         """
         global test_colour
         route = self.path.split("?")[0]
@@ -296,24 +312,24 @@ class Handler(BaseHTTPRequestHandler):
                               "application/json")
         if route != "/output":
             return self._send(404, b"not found", "text/plain")
-        taille = int(self.headers.get("Content-Length") or 0)
+        length = int(self.headers.get("Content-Length") or 0)
         try:
-            body = json.loads(self.rfile.read(taille) or b"{}")
+            body = json.loads(self.rfile.read(length) or b"{}")
         except ValueError:
             return self._send(400, b'{"error":"json"}', "application/json")
         with lock:
-            canal = body.get("channel")
-            if canal:
-                desired_outputs[canal] = bool(body.get("active"))
+            channel = body.get("channel")
+            if channel:
+                desired_outputs[channel] = bool(body.get("active"))
             if body.get("colour"):
                 test_colour = body["colour"]
-            reponse = {"supported": False, "outputs": desired_outputs,
-                       "colour": test_colour}
-        self._send(200, json.dumps(reponse).encode(), "application/json")
+            answer = {"supported": False, "outputs": desired_outputs,
+                      "colour": test_colour}
+        self._send(200, json.dumps(answer).encode(), "application/json")
 
 
-def option(name, defaut, cast=str):
-    return cast(sys.argv[sys.argv.index(name) + 1]) if name in sys.argv else defaut
+def option(name, fallback, cast=str):
+    return cast(sys.argv[sys.argv.index(name) + 1]) if name in sys.argv else fallback
 
 
 def main():
@@ -324,12 +340,12 @@ def main():
     else:
         start_worker(port)
     server = ThreadingHTTPServer(("127.0.0.1", http), Handler)
-    print(f"[*] panel: http://127.0.0.1:{http}   (serial port: {port or "none"})")
+    print(f"[*] panel: http://127.0.0.1:{http}   (serial port: {port or 'none'})")
     print("    Ctrl+C to stop")
     try:
         server.serve_forever()
     except KeyboardInterrupt:
-        print("\n[*] arret")
+        print("\n[*] stopped")
     finally:
         stop.set()
         server.server_close()

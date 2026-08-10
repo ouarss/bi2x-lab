@@ -93,19 +93,19 @@ const updateTable = (tracking, boutons, system) => {
   }
 
   for (const [i, nom] of ALL_INPUTS.entries()) {
-    const s = tracking?.[nom] || { appuis: 0, previous_ms: 0, cumul_ms: 0 }
+    const s = tracking?.[nom] || { presses: 0, total_ms: 0, last_ms: 0 }
     const vu = active(nom)
     headRow.children[i + 1].classList.toggle('actif', vu)
     const values = {
-      appuis: String(s.appuis),
-      previous: s.previous_ms ? formatDuration(s.previous_ms) : '-',
-      cumul: s.cumul_ms ? formatDuration(s.cumul_ms) : '-',
+      presses: String(s.presses),
+      last: s.last_ms ? formatDuration(s.last_ms) : '-',
+      total: s.total_ms ? formatDuration(s.total_ms) : '-',
     }
     for (const row of el.tableau.querySelectorAll('tbody tr')) {
       const cell = row.children[i + 1]
       cell.textContent = values[row.dataset.row]
       cell.classList.toggle('actif', vu)
-      cell.classList.toggle('jamais', !s.appuis && !vu)
+      cell.classList.toggle('jamais', !s.presses && !vu)
     }
   }
 }
@@ -123,9 +123,9 @@ const appendEvents = (evenements) => {
     li.className = e.active ? 'on' : 'off'
     li.innerHTML =
       `<span class="stamp">${e.t.toFixed(2)}s</span>` +
-      `<span class="nom">${e.entree}</span>` +
+      `<span class="nom">${e.input}</span>` +
       `<span class="action">${e.active ? 'pressed' : 'released'}</span>` +
-      `<span class="duree">${e.duree_ms ? formatDuration(e.duree_ms) : ''}</span>`
+      `<span class="duree">${e.duration_ms ? formatDuration(e.duration_ms) : ''}</span>`
     fragment.prepend(li)
   }
   el.journal.prepend(fragment)
@@ -194,7 +194,7 @@ const sendOutput = async (nom, active) => {
     await fetch(`${API}/output`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ canal: nom, active, couleur: document.getElementById('couleur').value }),
+      body: JSON.stringify({ channel: nom, active, colour: document.getElementById('couleur').value }),
     })
   } catch { /* the server reports whether it can emit */ }
 }

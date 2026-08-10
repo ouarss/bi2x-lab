@@ -23,16 +23,16 @@ HERE = os.path.dirname(os.path.abspath(__file__))
 BUTTON_ORDER = ["START", "BT-A", "BT-B", "BT-C", "BT-D", "FX-L", "FX-R"]
 
 
-def option(name, defaut, cast=str):
+def option(name, fallback, cast=str):
     if name in sys.argv:
         return cast(sys.argv[sys.argv.index(name) + 1])
-    return defaut
+    return fallback
 
 
 def main():
     port = option("--port", "COM4")
-    duration = option("--secondes", 30.0, float)
-    verbose = "--verbose" in sys.argv
+    duration = option("--seconds", 30.0, float)
+    raw = "--raw" in sys.argv
 
     try:
         replay = json.load(open(os.path.join(HERE, "replay.json")))
@@ -41,12 +41,12 @@ def main():
         return 1
     init = [bytes.fromhex(h) for h in replay["init"]]
     poll = {int(k): bytes.fromhex(v) for k, v in replay["poll"].items()}
-    print(f"[*] {len(init)} trames d'initialisation, {len(poll)} formes de poll")
+    print(f"[*] {len(init)} startup frames, {len(poll)} poll request forms")
 
     try:
         sp = serial.Serial(port, 115200, timeout=0.004, write_timeout=1.0)
     except serial.SerialException as e:
-        print(f"[!] {port} inaccessible : {e}")
+        print(f"[!] cannot open {port}: {e}")
         print("    Close anything else using the port, then try again.")
         return 1
 
@@ -61,7 +61,7 @@ def main():
                 print(f"    {i}/{len(init)}")
         time.sleep(0.05)
         sp.reset_input_buffer()
-        print("[*] initialisation envoyee, passage en poll\n")
+        print("[*] startup sequence sent, polling\n")
 
         buffer = bytearray()
         state = None
@@ -94,7 +94,7 @@ def main():
                     names = ", ".join(x for i2, x in enumerate(BUTTON_ORDER)
                                      if b >> i2 & 1) or "-"
                     print(f"  buttons={names:32s} VOL-L={volL:5d} VOL-R={volR:5d}")
-                    if verbose:
+                    if raw:
                         print(f"    rec0 = {' '.join(f'{c:02X}' for c in rs[0])}")
         print(f"\n[*] {n} responses decoded, header CRC valid on "
               f"{100 * ok // max(n, 1)} %")
@@ -102,10 +102,10 @@ def main():
             print("    No response: the board rejected the replayed requests."
                   "\n    Unplug the USB cable, plug it back in, then try again.")
     except KeyboardInterrupt:
-        print("\n[*] interrompu")
+        print("\n[*] interrupted")
     finally:
         sp.close()
-        print("[*] port ferme")
+        print("[*] port closed")
     return 0
 
 
