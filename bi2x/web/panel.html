@@ -41,6 +41,7 @@
             <div class="cadran"><div class="aiguille"></div><div class="moyeu"></div></div>
             <h2>VOL&#8209;L</h2>
             <p class="valeur"><span class="brut">0</span><span class="degres">0°</span></p>
+            <p class="echelle"><span class="graduation">0</span><span class="tours">0.00 rev</span></p>
           </div>
 
           <button class="bouton start" id="btn-START" type="button" disabled>
@@ -51,6 +52,7 @@
             <div class="cadran"><div class="aiguille"></div><div class="moyeu"></div></div>
             <h2>VOL&#8209;R</h2>
             <p class="valeur"><span class="brut">0</span><span class="degres">0°</span></p>
+            <p class="echelle"><span class="graduation">0</span><span class="tours">0.00 rev</span></p>
           </div>
         </div>
 
@@ -77,6 +79,25 @@
         </div>
       </div>
     </div>
+
+    <section class="bloc">
+      <div class="bloc-titre">
+        <h2>Reading the knobs</h2>
+      </div>
+      <div class="explication">
+        <p>Each knob shows three numbers: the <b>raw</b> 16-bit position, the same
+        position on the <b>0&#8239;–&#8239;1023</b> scale a check screen displays, and the
+        <b>revolutions</b> travelled since this page connected.</p>
+        <p><b>One revolution is one full range.</b> The counter wraps once per turn,
+        which is why a reader has to sample fast: sample slowly and half a turn
+        looks like half a turn <i>backwards</i>, since nothing distinguishes the two.
+        Measured by counting wraps over five slow revolutions — 65357 counts each,
+        within 0.3&#8239;% of 65536.</p>
+        <p>Turn a knob exactly five times and watch the revolution count: if it does
+        not read 5, the reading is losing motion, and no amount of scaling downstream
+        will put it back.</p>
+      </div>
+    </section>
 
     <section class="bloc">
       <div class="bloc-titre">

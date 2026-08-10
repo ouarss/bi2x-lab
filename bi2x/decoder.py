@@ -209,8 +209,29 @@ def pressed(record):
 
 
 def knob_delta(new, old):
-    """Rotation between two readings, accounting for the 16-bit wrap."""
+    """Rotation between two readings, accounting for the 16-bit wrap.
+
+    Only valid while a knob moves less than half a range between two readings.
+    That is not a formality: one revolution IS a full range (see below), so a
+    reader that samples slowly enough will read a fast turn as a slow one
+    backwards. Sample fast, or measure nothing.
+    """
     return ((new - old + 32768) & 0xFFFF) - 32768
+
+
+# One revolution of a knob spans the whole counter: 4096 twelve-bit counts, which
+# the expansion above turns into a full 16-bit range. Measured by counting wraps
+# over five slow revolutions -- 65357 counts each, within 0.3 % of 65536.
+#
+# The quartered scale below, 1024 steps per revolution, is what a check screen
+# shows an operator, which makes it the unit to compare a reading against.
+COUNTS_PER_REVOLUTION = 65536
+GRADUATIONS_PER_REVOLUTION = 1024
+
+
+def graduation(value16):
+    """A knob position on the 0..1023 scale, rather than the raw 0..65535."""
+    return (value16 * GRADUATIONS_PER_REVOLUTION // COUNTS_PER_REVOLUTION) & 0x3FF
 
 
 def _load(path):

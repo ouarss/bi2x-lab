@@ -44,6 +44,19 @@ record : [0..6] 56 digital inputs, active low
 Header CRC4 uses table `00 0D 03 0E 06 0B 05 08 0C 01 0F 02 0A 07 09 04`, payload CRC7
 uses `00 09 12 1B 24 2D 36 3F 48 41 5A 53 6C 65 7E 77`.
 
+### Knob resolution
+
+**One revolution is one full range.** The 12-bit counter wraps exactly once per turn:
+4096 counts, or 1024 once quartered — the scale a check screen puts in front of an
+operator. Measured by counting wraps over five slow revolutions, 65357 counts each,
+within 0.3 % of 65536.
+
+The consequence outweighs the number. A reader that samples slowly cannot tell half a
+turn from half a turn *backwards*, because both land the counter in the same place;
+past a quarter range per sample the direction itself becomes a guess. Sampling at the
+rate the board answers is not an optimisation, it is the difference between measuring
+rotation and inventing it.
+
 ### Deobfuscation
 
 Set when bit 4 of the flags byte is set. Seeded per packet from the frame tag:
@@ -205,7 +218,7 @@ any given panel, which is why most of the 56-bit input field never changes.
 | SERVICE | block header byte 2, bit 2 | 0 | 1 |
 | COIN MECH | block header byte 2, bit 3 | 0 | 1 |
 | HEADPHONE | block header byte 4 | 0x00 | non-zero |
-| VOL-L / VOL-R | analog channels 0 / 1 | steady, ±16 of jitter | 0..65535, wraps |
+| VOL-L / VOL-R | analog channels 0 / 1 | steady, ±16 of jitter | 0..65535, wraps once per revolution |
 | analog ch2, ch3 | analog channels 2, 3 | constant | never move, no connector |
 | poll counter | block header byte 0 | increments every cycle | flat means a dead link |
 | bit 47 | record byte 5, bit 7 | always 0 | top bit of a 7-bit field, not an input |

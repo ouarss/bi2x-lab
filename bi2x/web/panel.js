@@ -37,7 +37,9 @@ const moving = { volL: 0, volR: 0 }
 const wrappedDelta = (nouveau, ancien) =>
   ((nouveau - ancien + 32768) & 0xffff) - 32768
 
-const updateKnob = (key, value) => {
+// One revolution spans the whole range, so the needle angle IS the knob angle,
+// and the graduation is that same position quartered onto the 0..1023 scale.
+const updateKnob = (key, value, graduation, revolutions) => {
   const node = knobs[key]
   if (!node) return
   const angle = (value / 65536) * 360
@@ -45,6 +47,8 @@ const updateKnob = (key, value) => {
     `translateY(-100%) rotate(${angle.toFixed(1)}deg)`
   node.querySelector('.brut').textContent = value
   node.querySelector('.degres').textContent = `${angle.toFixed(0)}°`
+  node.querySelector('.graduation').textContent = graduation
+  node.querySelector('.tours').textContent = `${revolutions.toFixed(2)} rev`
 
   // Dead zone: the ±16 idle jitter must not read as rotation.
   if (previous[key] !== null && Math.abs(wrappedDelta(value, previous[key])) > 32) {
@@ -245,8 +249,8 @@ const render = (state) => {
     : '-'
 
   for (const nom of BUTTONS) updateButton(nom, state.buttons?.[nom])
-  updateKnob('volL', state.volL || 0)
-  updateKnob('volR', state.volR || 0)
+  updateKnob('volL', state.volL || 0, state.gradL || 0, state.turnsL || 0)
+  updateKnob('volR', state.volR || 0, state.gradR || 0, state.turnsR || 0)
   updateSystem(state.system)
   updateTable(state.tracking, state.buttons, state.system)
   updateRaw(state)

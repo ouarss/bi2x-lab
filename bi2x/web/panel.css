@@ -127,6 +127,13 @@ body {
 .valeur .brut { font-size: 1.05rem; font-weight: 600; }
 .valeur .degres { color: var(--attenue); }
 
+/* The same position on the 0..1023 scale, and revolutions travelled since start. */
+.echelle {
+  margin: .15rem 0 0; display: flex; justify-content: center; gap: .55rem;
+  font-variant-numeric: tabular-nums; font-size: .78rem; color: var(--attenue);
+}
+.echelle .graduation { color: var(--cyan); font-weight: 600; }
+
 /* ----------------------------------------------------------- boutons */
 
 .bouton {
@@ -182,6 +189,11 @@ body {
 .lien:hover { color: var(--cyan); }
 .filtre { display: flex; align-items: center; gap: .35rem; cursor: pointer; }
 .aide { margin: .8rem 0 0; color: var(--attenue); font-size: .76rem; }
+
+.explication { color: var(--attenue); font-size: .82rem; line-height: 1.5; }
+.explication p { margin: 0 0 .6rem; }
+.explication p:last-child { margin-bottom: 0; }
+.explication b { color: var(--texte); font-weight: 600; }
 
 .temoins, .sorties { list-style: none; margin: 0; padding: 0; }
 .temoins { display: flex; gap: 1.75rem; flex-wrap: wrap; }

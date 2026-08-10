@@ -35,7 +35,9 @@ ALL_INPUTS = BUTTON_ORDER + ["TEST", "SERVICE", "COIN", "HEADPHONE"]
 
 state = {"connected": False, "error": None, "buttons": {n: False for n in BUTTON_ORDER},
         "volL": 0, "volR": 0, "system": {}, "frames": 0, "crc_ok": 0,
-        "rate": 0.0, "channels": [0, 0, 0, 0], "port": None}
+        "rate": 0.0, "channels": [0, 0, 0, 0], "port": None,
+        # Same positions on the 0..1023 scale, and revolutions since connection.
+        "gradL": 0, "gradR": 0, "turnsL": 0.0, "turnsR": 0.0}
 # Per-input tracking: press count, cumulative hold time, last hold time.
 tracking = {n: {"presses": 0, "total_ms": 0, "last_ms": 0} for n in ALL_INPUTS}
 events = deque(maxlen=400)      # {seq, t, entree, state, duree_ms}
@@ -140,6 +142,9 @@ def serial_loop(port):
         buffer = bytearray()
         tag = 0
         n = ok = 0
+        # Unwrapped travel, so that a revolution can be counted rather than assumed.
+        previous_analog = None
+        travel = [0, 0]
         window_start = time.time()
         window_frames = 0
         while not stop.is_set():
@@ -160,6 +165,10 @@ def serial_loop(port):
                 ok += f["crc4_ok"]
                 d = dec.digital(rs[0])
                 a = dec.analog(rs[0])
+                if previous_analog is not None:
+                    for k in (0, 1):
+                        travel[k] += dec.knob_delta(a[k], previous_analog[k])
+                previous_analog = a
                 buttons = {name: not (d >> b) & 1 for name, b in dec.BUTTONS.items()}
                 system_state = dec.system_inputs(f["payload"])
                 now = time.time()
@@ -172,6 +181,10 @@ def serial_loop(port):
                             _log_edge(name, bool(system_state.get(name)), now)
                     state["buttons"] = buttons
                     state["volL"], state["volR"] = a[0], a[1]
+                    state["gradL"] = dec.graduation(a[0])
+                    state["gradR"] = dec.graduation(a[1])
+                    state["turnsL"] = travel[0] / dec.COUNTS_PER_REVOLUTION
+                    state["turnsR"] = travel[1] / dec.COUNTS_PER_REVOLUTION
                     state["channels"] = a
                     state["system"] = system_state
                     state["frames"] = n
