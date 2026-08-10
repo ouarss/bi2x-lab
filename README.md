@@ -47,15 +47,41 @@ uses `00 09 12 1B 24 2D 36 3F 48 41 5A 53 6C 65 7E 77`.
 ### Knob resolution
 
 **One revolution is one full range.** The 12-bit counter wraps exactly once per turn:
-4096 counts, or 1024 once quartered — the scale a check screen puts in front of an
-operator. Measured by counting wraps over five slow revolutions, 65357 counts each,
-within 0.3 % of 65536.
+4096 counts, or 1024 once quartered, which is the scale a check screen puts in front
+of an operator. Measured by counting wraps over five slow revolutions, 65357 counts
+each, within 0.3 % of 65536.
 
 The consequence outweighs the number. A reader that samples slowly cannot tell half a
 turn from half a turn *backwards*, because both land the counter in the same place;
 past a quarter range per sample the direction itself becomes a guess. Sampling at the
 rate the board answers is not an optimisation, it is the difference between measuring
 rotation and inventing it.
+
+### Reading rate, and bad readings
+
+The board produces about **469 records a second**, and every answer carries the last
+seventeen of them: **36 ms of history** per read. Polling faster buys nothing. At 624
+requests a second, half the answers repeated the previous cycle, and a block read
+while the firmware writes it comes back torn.
+
+**Roughly 0.5 % of records carry a position several thousand counts off the trend of
+their own window**, sometimes two in a row. Taking the median of the five newest
+records removes them: those records are ~2 ms apart, so the median is the same
+position, minus the outliers, two milliseconds late. The cause of the bad records is
+not established.
+
+One trap is worth stating, because measuring it cost a full turn out of five. A reader
+that rejects a suspicious step **also throws away the real movement that step carried**,
+and the loss accumulates silently: five slow revolutions came out as 3.89. Hold the
+step back instead, and leave the reference where it was. If the next reading returns
+near it, the spike was noise and nothing was lost. Two suspicious steps in a row mean
+the knob really moved that fast, and the whole travel is taken at once.
+
+Pacing a reader on Windows deserves the same caution. `Sleep(0)` hands the thread to
+the scheduler, which returns it a quantum later: a loop asking for 300 Hz that way ran
+at 68, adding fifteen milliseconds of latency to every input. `Sleep(1)` is only worth
+anything with the system timer raised to a millisecond, and the last millisecond has
+to be spun out.
 
 ### Deobfuscation
 
