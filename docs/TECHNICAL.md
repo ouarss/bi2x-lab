@@ -30,6 +30,22 @@ from a half turn backwards, because both put the counter in the same place. Past
 each sample, the direction is a guess. So you must sample at the rate the board answers. If not, you
 do not measure the rotation. You invent it.
 
+## Knobs (hardware)
+
+The knobs are Sensatec ELV-24 Y36A-K sensors. The ELV-24 Y36A-K is discontinued. Sensatec gives the
+ELV-24 Y36G as the replacement. The two parts do not have the same output range, so do not assume one
+range for both.
+
+The sensor is a Hall-effect rotary sensor, not an incremental encoder. It turns 360 degrees with no
+stop. It gives a linear analog voltage, from 0.07 V to 4.92 V, ±1% full scale. The output is
+ratiometric: it follows the Vcc. The sensor has three pins: 1 = GND, 2 = OUT, 3 = Vcc. The connector
+is a JST B3B-ZR (ZH series, 3 pins). It mates with a ZHR-3 header.
+
+The board reads the OUT line with a 12-bit ADC, on the analog channels (CN13, ANALOG0 and ANALOG1).
+So the value is an analog position, not a pulse count. A continuous turn makes a sawtooth: the value
+rises to the maximum, then returns to zero. So the reader finds the movement by a wrapped difference,
+not by a count of pulses. The ±16 jitter at rest is ADC noise.
+
 ## Reading rate and bad readings
 
 The board makes about 469 records each second. Each answer carries the last seventeen records, so
