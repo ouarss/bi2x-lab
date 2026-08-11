@@ -49,7 +49,8 @@ The image below shows the web panel.
 The live tools send request frames to poll the board. The board request payload is compressed, and
 this project does not implement that compression. So the tools replay recorded requests from
 `bi2x/replay.json`. This project does not distribute that file. Make your own from a capture of your
-cabinet. The decoder does not need this file. It decodes any stream that you already have.
+cabinet, see [docs/CAPTURE.md](docs/CAPTURE.md). The decoder does not need this file. It decodes any
+stream that you already have.
 
 For how the poll works and what `replay.json` holds, see
 [docs/COMMUNICATION.md](docs/COMMUNICATION.md).

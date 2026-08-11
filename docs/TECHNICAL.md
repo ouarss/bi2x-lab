@@ -215,4 +215,5 @@ must send frames. This needs the outbound command format. This is the next task.
 
 ## Known gaps
 
-- The outbound frames are not implemented. So you cannot write to the board.
+- The outbound frames are not implemented. So you cannot write to the board. See
+  [OUTPUTS-TODO.md](OUTPUTS-TODO.md) for the plan.
