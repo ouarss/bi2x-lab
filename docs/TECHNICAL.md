@@ -3,7 +3,8 @@
 # bi2x-lab: protocol and hardware
 
 This document has the protocol, the connectors and the signal map. For the tools and the run steps,
-see the [README](../README.md).
+see the [README](../README.md). For the poll model and `replay.json`, see
+[COMMUNICATION.md](COMMUNICATION.md).
 
 ## Protocol summary
 

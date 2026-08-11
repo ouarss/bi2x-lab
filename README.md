@@ -51,6 +51,9 @@ this project does not implement that compression. So the tools replay recorded r
 `bi2x/replay.json`. This project does not distribute that file. Make your own from a capture of your
 cabinet. The decoder does not need this file. It decodes any stream that you already have.
 
+For how the poll works and what `replay.json` holds, see
+[docs/COMMUNICATION.md](docs/COMMUNICATION.md).
+
 ## Layout
 
 ```
