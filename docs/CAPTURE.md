@@ -46,6 +46,11 @@ virtual ports, but it needs the extra adapter and the wiring.
 - A few seconds of steady polling. The poll request repeats with a `tag` that rolls through 128
   values. You must record long enough to see all 128.
 
+To capture the outputs (the lamps and the LED strips), record the host-to-board direction while the
+operator test menu drives them. The `LAMP CHECK` screen in `AUTO` mode lights one output at a time,
+in a named order, which labels each outbound frame for you. See
+[TEST-MENU.md](TEST-MENU.md) for the screens and the sequence.
+
 ## Turn the capture into replay.json
 
 Save the host-to-board bytes to a file, for example `host-to-board.bin`. Then run this from the repo

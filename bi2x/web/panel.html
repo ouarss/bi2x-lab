@@ -151,24 +151,18 @@
         <h2>Button lamps</h2>
         <span class="note">12 V, CN11 OUTPUT_A</span>
       </div>
-      <ul class="sorties" id="lamps"></ul>
-    </section>
-
-    <section class="bloc">
-      <div class="bloc-titre">
-        <h2>LED strips</h2>
-        <span class="note">data on CN18 OUTPUT_F</span>
+      <div class="lamp-global">
+        <button type="button" class="lien" id="lamp-allumer">all on</button>
+        <button type="button" class="lien" id="lamp-eteindre">all off</button>
       </div>
-      <div class="couleur-ligne">
-        <label for="couleur">Test colour</label>
-        <input type="color" id="couleur" value="#35e2f0">
-        <button type="button" class="lien" id="tout-eteindre">all off</button>
+      <ul class="sorties lampes" id="lamps"></ul>
+      <p class="aide">The lamps are plain 12 V LEDs: on or off. Their state travels
+         in the poll frame (SetOutputs): after the first change the server builds
+         every poll frame itself. The frame below is the poll built for tag 00.</p>
+      <div class="led-trame">
+        <span class="etiquette-trame">poll frame (tag 00)</span>
+        <code id="lamp-trame-hex">-</code>
       </div>
-      <ul class="sorties" id="strips"></ul>
-      <p class="aide">Addressable strips, one data line each. Most are WS2812B running
-         at 5 V off the CN18 +5V_IN rail; a few are 12 V parts.</p>
-      <p class="aide" id="aide-sorties">Toggles are staged locally: the outbound
-         command is not implemented yet, so nothing is sent to the board.</p>
     </section>
 
     <section class="bloc">
@@ -181,6 +175,30 @@
 
   </aside>
 </div>
+
+<section class="bloc pleine-largeur" id="banc-led">
+  <div class="bloc-titre">
+    <h2>LED test bench</h2>
+    <span class="note">8 strips, 428 LEDs, CN18 OUTPUT_F</span>
+  </div>
+  <div class="led-brush">
+    <label class="pinceau">Colour
+      <input type="color" id="led-couleur" value="#ff3040"></label>
+    <label class="pinceau intensite">Intensity
+      <input type="range" id="led-intensite" min="0" max="100" value="100">
+      <b id="led-intensite-val">100%</b></label>
+    <button type="button" class="lien" id="led-tout">apply to all</button>
+    <button type="button" class="lien" id="led-eteindre">all off</button>
+  </div>
+  <p class="aide">Set the colour and intensity of each strip below, or apply the top
+     colour to all. When the board is connected the matching SetTapeLedData frame is
+     sent; either way the built frame is shown below.</p>
+  <div class="led-bancs" id="led-bancs"></div>
+  <div class="led-trame">
+    <span class="etiquette-trame">frame sent</span>
+    <code id="led-trame-hex">-</code>
+  </div>
+</section>
 
 <footer class="pied">
   <p>Turn each volume slowly through a full revolution: the needle should sweep 360°
