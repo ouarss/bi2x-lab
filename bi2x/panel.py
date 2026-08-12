@@ -3,6 +3,8 @@
 A worker thread talks to the board on the serial port and decodes the stream; the page
 shows the panel laid out the way it physically is, both analog volumes, START, the four
 BT buttons, the two FX buttons, plus the service inputs and the raw input view.
+The page also drives the outputs: the LED strips (SetTapeLedData frames), and the
+button lamps, whose intensities travel inside the poll frame (SetOutputs).
 
 Only dependency: pyserial. Nothing is published online, everything runs locally.
 
@@ -26,6 +28,7 @@ sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 import serial                                   # noqa: E402
 from serial.tools import list_ports             # noqa: E402
 import decoder as dec                  # noqa: E402
+import encoder as enc                  # noqa: E402
 
 HERE = os.path.dirname(os.path.abspath(__file__))
 WEB = os.path.join(HERE, "web")
@@ -41,8 +44,28 @@ state = {"connected": False, "error": None, "buttons": {n: False for n in BUTTON
 # Per-input tracking: press count, cumulative hold time, last hold time.
 tracking = {n: {"presses": 0, "total_ms": 0, "last_ms": 0} for n in ALL_INPUTS}
 events = deque(maxlen=400)      # {seq, t, input, active, duration_ms}
-desired_outputs = {}                # channel -> bool (intent only, never emitted)
-test_colour = "#35e2f0"
+
+# Button lamp state. The lamps ride INSIDE the poll frame (SetOutputs 03 11):
+# byte 0 of the 44-byte output field is the master enable, the 7 lamps sit at
+# offsets 17..23 in BUTTON_ORDER. The protocol carries one intensity byte 0..255
+# per output, but these lamps are plain 12 V LEDs, on or off in practice, so the
+# state is a boolean, written as 0xff or 0x00. Until the first lamp command the
+# captured polls are replayed unchanged; after it, every poll frame is built here
+# and carries the current lamp state.
+LAMP_FIELD_LEN = 44
+LAMP_FIELD_BASE = 17
+lamp_state = {n: False for n in BUTTON_ORDER}
+lamps_engaged = False
+
+# The eight addressable LED outputs (CN18 F0..F7) and their installed LED counts,
+# read from the board's own SetTapeLedData frames during a LAMP CHECK capture.
+STRIP_LEDS = [74, 12, 12, 56, 56, 94, 38, 86]
+# Current colour of every LED, as 5-bit (r, g, b). This is the state the page shows
+# and the state the outbound frames carry.
+led_state = [[(0, 0, 0)] * n for n in STRIP_LEDS]
+led_last_frames = []                # hex of the frames built by the last LED command
+outbound = deque()                  # frames waiting for the serial worker to send
+out_tag = 0                         # tag counter for the frames we build ourselves
 _sequence = 0
 _held_since = {}                        # input -> instant of the rising edge
 lock = threading.Lock()
@@ -148,9 +171,26 @@ def serial_loop(port):
         window_start = time.time()
         window_frames = 0
         while not stop.is_set():
-            sp.write(poll[tag & 0x7F])
+            # Replayed poll by default; once a lamp is driven, a poll built here,
+            # since the lamp state lives in the poll frame and a replayed poll
+            # would reset it on the next cycle.
+            with lock:
+                payload = lamp_poll_payload() if lamps_engaged else None
+            if payload is None:
+                request = poll[tag & 0x7F]
+            else:
+                request = enc.encode_frame(tag & 0x7F, payload)
+            sp.write(request)
             sp.flush()
             tag = (tag + 1) & 0xFF
+            # Send whatever LED/output frames the page has queued, between polls.
+            pending = []
+            with lock:
+                while outbound:
+                    pending.append(outbound.popleft())
+            for frame in pending:
+                sp.write(frame)
+                sp.flush()
             buffer += sp.read(sp.in_waiting or 1)
             frames, consumed = dec.parse_stream(bytes(buffer))
             if consumed:
@@ -208,6 +248,50 @@ def serial_loop(port):
         sp.close()
 
 
+def _hex_to_rgb(text):
+    text = text.lstrip("#")
+    return int(text[0:2], 16), int(text[2:4], 16), int(text[4:6], 16)
+
+
+def _led_frame(strip, pixels, offset=0):
+    """Build a SetTapeLedData frame with the next outbound tag. Call under the lock."""
+    global out_tag
+    frame = enc.tape_led_frame(out_tag, strip, pixels, offset)
+    out_tag = (out_tag + 1) & 0xFF
+    return frame
+
+
+def apply_led(colour, brightness, strip=None):
+    """Fill one strip (`strip` given) or every strip (`strip` None) with `colour`,
+    scaled by `brightness` (0..100). Updates the shown state, builds the frames, and
+    queues them for the board when it is connected. Returns the frame hex strings.
+    Call under the lock."""
+    global led_last_frames
+    r8, g8, b8 = _hex_to_rgb(colour)
+    pixel = enc.rgb_to_555(r8, g8, b8, brightness / 100.0)
+    targets = range(len(STRIP_LEDS)) if strip is None else [strip]
+    frames = []
+    for s in targets:
+        led_state[s] = [pixel] * STRIP_LEDS[s]
+        frames.append(_led_frame(s, led_state[s]))
+    if state["connected"]:
+        outbound.extend(frames)
+    led_last_frames = [f.hex() for f in frames]
+    return led_last_frames
+
+
+def lamp_poll_payload():
+    """SetOutputs plaintext for one poll frame: 03 11 | 44-byte field | 03 10.
+
+    The trailing 03 10 asks for the input block, so this frame IS the poll: it
+    replaces the replayed one completely. Call under the lock."""
+    field = bytearray(LAMP_FIELD_LEN)
+    field[0] = 0xFF
+    for i, name in enumerate(BUTTON_ORDER):
+        field[LAMP_FIELD_BASE + i] = 0xFF if lamp_state[name] else 0x00
+    return b"\x03\x11" + bytes(field) + b"\x03\x10"
+
+
 class Handler(BaseHTTPRequestHandler):
     def log_message(self, *a):
         pass
@@ -258,10 +342,20 @@ class Handler(BaseHTTPRequestHandler):
             body = json.dumps({"ports": available_ports(),
                                "current": state.get("port")}).encode()
             return self._send(200, body, "application/json")
-        if route == "/outputs":
+        if route == "/lamp/state":
             with lock:
-                body = json.dumps({"supported": False, "outputs": desired_outputs,
-                                    "colour": test_colour}).encode()
+                body = json.dumps({"lamps": dict(lamp_state),
+                                   "engaged": lamps_engaged,
+                                   "connected": state["connected"],
+                                   "frame": enc.encode_frame(0, lamp_poll_payload()).hex()
+                                   }).encode()
+            return self._send(200, body, "application/json")
+        if route == "/led/state":
+            with lock:
+                strips = [{"leds": n, "pixels": led_state[s]}
+                          for s, n in enumerate(STRIP_LEDS)]
+                body = json.dumps({"strips": strips, "connected": state["connected"],
+                                   "frames": led_last_frames}).encode()
             return self._send(200, body, "application/json")
         if route == "/reset":
             with lock:
@@ -291,13 +385,8 @@ class Handler(BaseHTTPRequestHandler):
         self.end_headers()
 
     def do_POST(self):
-        """Desired output state.
-
-        Nothing is sent to the board: outbound frames are not implemented yet. The
-        intent is stored so the interface is already wired for the day writing works,
-        and `supported: false` says so plainly rather than pretending to drive.
-        """
-        global test_colour
+        """Commands from the page: port selection, LED bench, button lamps."""
+        global lamps_engaged
         route = self.path.split("?")[0]
         if route == "/connect":
             length = int(self.headers.get("Content-Length") or 0)
@@ -310,21 +399,50 @@ class Handler(BaseHTTPRequestHandler):
             start_worker(asked)
             return self._send(200, json.dumps({"port": asked}).encode(),
                               "application/json")
-        if route != "/output":
+        if route in ("/led/all", "/led/strip", "/led/clear"):
+            length = int(self.headers.get("Content-Length") or 0)
+            try:
+                body = json.loads(self.rfile.read(length) or b"{}")
+            except ValueError:
+                return self._send(400, b'{"error":"json"}', "application/json")
+            colour = body.get("colour", "#000000")
+            brightness = float(body.get("brightness", 100))
+            strip = None
+            if route == "/led/strip":
+                strip = int(body.get("strip", -1))
+                if not (0 <= strip < len(STRIP_LEDS)):
+                    return self._send(400, b'{"error":"range"}', "application/json")
+            with lock:
+                if route == "/led/clear":
+                    frames = apply_led("#000000", 100)
+                else:
+                    frames = apply_led(colour, brightness, strip)
+                connected = state["connected"]
+            return self._send(200, json.dumps({"ok": True, "connected": connected,
+                                               "frames": frames}).encode(),
+                              "application/json")
+        if route not in ("/lamp/set", "/lamp/all"):
             return self._send(404, b"not found", "text/plain")
         length = int(self.headers.get("Content-Length") or 0)
         try:
             body = json.loads(self.rfile.read(length) or b"{}")
         except ValueError:
             return self._send(400, b'{"error":"json"}', "application/json")
+        on = bool(body.get("on"))
         with lock:
-            channel = body.get("channel")
-            if channel:
-                desired_outputs[channel] = bool(body.get("active"))
-            if body.get("colour"):
-                test_colour = body["colour"]
-            answer = {"supported": False, "outputs": desired_outputs,
-                      "colour": test_colour}
+            if route == "/lamp/set":
+                lamp = body.get("lamp")
+                if lamp not in lamp_state:
+                    return self._send(400, b'{"error":"lamp"}', "application/json")
+                lamp_state[lamp] = on
+            else:
+                for name in lamp_state:
+                    lamp_state[name] = on
+            # From now on the serial worker builds every poll frame itself.
+            lamps_engaged = True
+            answer = {"ok": True, "connected": state["connected"],
+                      "lamps": dict(lamp_state),
+                      "frame": enc.encode_frame(0, lamp_poll_payload()).hex()}
         self._send(200, json.dumps(answer).encode(), "application/json")
 
 

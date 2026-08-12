@@ -17,9 +17,10 @@ known. The read direction (inbound) is solved. The write direction (outbound) is
 
 ## Plan
 
-1. Capture the outbound frames. Run the vendor software. Use the operator TEST menu (the lamp test
-   and the LED test) and the attract mode. These drive every output. Record the host-to-board serial
-   direction (see [CAPTURE.md](CAPTURE.md) for the method).
+1. Capture the outbound frames. Run the vendor software. Use the operator TEST menu (`LAMP CHECK`,
+   `AUTO` mode) and the attract mode. These drive every output, one at a time, in a named order.
+   Record the host-to-board serial direction (see [CAPTURE.md](CAPTURE.md) for the method, and
+   [TEST-MENU.md](TEST-MENU.md) for the screen, the output map and the AUTO sequence).
 2. Match each frame to its output. The test menu changes one output at a time. So you can map one
    frame to one lamp or one LED.
 3. Reverse the outbound frame format. Find the node, the command and the payload layout. Find how a

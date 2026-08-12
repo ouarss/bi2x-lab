@@ -172,61 +172,156 @@ const updateRaw = (state) => {
   }
 }
 
-// ------------------------------------------------------- sorties (LED)
+// ----------------------------------------------------------- button lamps
 
-// Button lamps: plain 12 V drivers on the board's first output bank.
+// Plain 12 V LEDs, on or off: the protocol carries one intensity byte 0..255 per
+// output (field offsets 17..23), but these lamps have no real dimming, hence the
+// toggles, written as 0xff or 0x00. The state rides INSIDE the poll frame
+// (SetOutputs); the first command switches the server from replayed polls to
+// polls it builds itself.
 const LAMPS = ['START', 'BT-A', 'BT-B', 'BT-C', 'BT-D', 'FX-L', 'FX-R']
-// Addressable strips: one data line each, on the board's eight data outputs.
-// Supply is not uniform: most are WS2812B at 5 V off the board's 5 V input rail,
-// a few are 12 V parts. LED counts are those of the installed strips.
-const STRIPS = [
-  ['TITLE', 44], ['TITLE-W1', 36], ['TITLE-W2', 36], ['E.LED-L1', 7],
-  ['E.LED-L2', 18], ['E.LED-L3', 14], ['E.LED-R1', 7], ['E.LED-R2', 18],
-  ['E.LED-CEN', 30], ['WING-L', 56], ['WING-R', 56], ['V-LED', 39],
-  ['NLED', 39], ['CON-LED', 8],
-]
 
-const outputStates = {}          // nom -> bool
-
-const sendOutput = async (nom, active) => {
-  outputStates[nom] = active
-  try {
-    await fetch(`${API}/output`, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ channel: nom, active, colour: document.getElementById('couleur').value }),
-    })
-  } catch { /* the server reports whether it can emit */ }
+const showLampFrame = (frame) => {
+  const box = document.getElementById('lamp-trame-hex')
+  if (box) box.textContent = frame ? spaced(frame) : '-'
 }
 
-const rowSortie = (nom, detail) => {
+// Repaint the rows from the server's lamp state, so the view matches what is sent.
+const refreshLamps = async () => {
+  try {
+    const { lamps, frame } = await (await fetch(`${API}/lamp/state`, { cache: 'no-store' })).json()
+    for (const nom of LAMPS) {
+      const li = document.querySelector(`.lampes li[data-lampe="${nom}"]`)
+      if (!li) continue
+      const on = Boolean(lamps?.[nom])
+      li.querySelector('.lamp-on').checked = on
+      li.classList.toggle('allume', on)
+    }
+    showLampFrame(frame)
+  } catch { /* server not up yet */ }
+}
+
+const postLamp = async (route, body) => {
+  try {
+    const r = await fetch(`${API}${route}`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(body),
+    })
+    showLampFrame((await r.json()).frame)
+  } catch { /* ignore */ }
+  refreshLamps()
+}
+
+const rowLamp = (nom) => {
   const li = document.createElement('li')
+  li.dataset.lampe = nom
   li.innerHTML =
-    `<label class="bascule"><input type="checkbox" data-canal="${nom}">` +
+    `<label class="bascule"><input type="checkbox" class="lamp-on">` +
     `<span class="glissiere"></span></label>` +
-    `<span class="output-name">${nom}</span>` +
-    `<span class="channel">${detail}</span>`
-  li.querySelector('input').addEventListener('change', (e) => {
-    sendOutput(nom, e.target.checked)
-    li.classList.toggle('allume', e.target.checked)
-  })
+    `<span class="output-name">${nom}</span>`
+  li.querySelector('.lamp-on').addEventListener('change', (e) =>
+    postLamp('/lamp/set', { lamp: nom, on: e.target.checked }))
   return li
 }
 
-const buildOutputs = () => {
-  const lamps = document.getElementById('lamps')
-  const strips = document.getElementById('strips')
-  for (const nom of LAMPS) lamps.append(rowSortie(nom, 'lamp'))
-  for (const [nom, n] of STRIPS) strips.append(rowSortie(nom, `${n} LED`))
+const buildLamps = () => {
+  const host = document.getElementById('lamps')
+  for (const nom of LAMPS) host.append(rowLamp(nom))
+  document.getElementById('lamp-allumer').addEventListener('click', () =>
+    postLamp('/lamp/all', { on: true }))
+  document.getElementById('lamp-eteindre').addEventListener('click', () =>
+    postLamp('/lamp/all', { on: false }))
+}
 
-  document.getElementById('tout-eteindre').addEventListener('click', () => {
-    for (const c of document.querySelectorAll('.sorties input[type=checkbox]')) {
-      if (c.checked) { c.checked = false; c.dispatchEvent(new Event('change')) }
-    }
+// ----------------------------------------------------------- LED test bench
+
+// The eight addressable outputs and their LED counts (from the board's own frames).
+const STRIP_LEDS = [74, 12, 12, 56, 56, 94, 38, 86]
+const to8 = (v) => Math.round((v * 255) / 31)      // 5-bit channel back to 8-bit
+const pixCss = ([r, g, b]) => `rgb(${to8(r)},${to8(g)},${to8(b)})`
+const spaced = (h) => (h.match(/../g) || []).join(' ')
+
+const showFrames = (frames) => {
+  const box = document.getElementById('led-trame-hex')
+  if (box) box.textContent = frames?.length ? frames.map(spaced).join('\n') : '-'
+}
+
+// Repaint the dots from the server's LED state, so the view matches what was sent.
+const refreshLed = async () => {
+  try {
+    const { strips, frames } = await (await fetch(`${API}/led/state`, { cache: 'no-store' })).json()
+    strips.forEach((strip, s) => {
+      const row = document.querySelector(`.led-rangee[data-strip="${s}"]`)
+      if (!row) return
+      strip.pixels.forEach((px, i) => {
+        if (row.children[i]) row.children[i].style.background = pixCss(px)
+      })
+    })
+    showFrames(frames)
+  } catch { /* server not up yet */ }
+}
+
+const postLed = async (route, body) => {
+  try {
+    const r = await fetch(`${API}${route}`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(body),
+    })
+    showFrames((await r.json()).frames)
+  } catch { /* ignore */ }
+  refreshLed()
+}
+
+const globalBrush = () => ({
+  colour: document.getElementById('led-couleur').value,
+  brightness: Number(document.getElementById('led-intensite').value),
+})
+const stripBrush = (banc) => ({
+  colour: banc.querySelector('.led-col').value,
+  brightness: Number(banc.querySelector('.led-int').value),
+})
+
+const buildLedBench = () => {
+  const host = document.getElementById('led-bancs')
+  host.innerHTML = STRIP_LEDS.map((n, s) =>
+    `<div class="led-banc" data-strip="${s}">` +
+    `<span class="led-nom">strip ${s} <i>${n} LED</i></span>` +
+    `<label class="pinceau"><input type="color" class="led-col" value="#ff3040"></label>` +
+    `<label class="pinceau intensite">` +
+    `<input type="range" class="led-int" min="0" max="100" value="100">` +
+    `<b class="led-int-val">100%</b></label>` +
+    `<div class="led-rangee" data-strip="${s}">` +
+    Array.from({ length: n }, (_, i) =>
+      `<span class="led-point" title="strip ${s}, LED ${i}"></span>`).join('') +
+    '</div></div>').join('')
+
+  // Live intensity read-out, and apply a whole strip when its colour or slider changes.
+  host.addEventListener('input', (e) => {
+    if (!e.target.classList.contains('led-int')) return
+    e.target.closest('.led-banc').querySelector('.led-int-val').textContent = `${e.target.value}%`
   })
-  document.getElementById('couleur').addEventListener('change', () => {
-    for (const [nom, active] of Object.entries(outputStates)) if (active) sendOutput(nom, true)
+  host.addEventListener('change', (e) => {
+    if (!e.target.classList.contains('led-col') && !e.target.classList.contains('led-int')) return
+    const banc = e.target.closest('.led-banc')
+    postLed('/led/strip', { strip: Number(banc.dataset.strip), ...stripBrush(banc) })
   })
+
+  // Global: apply the top colour to every strip, mirroring it onto each strip's controls.
+  document.getElementById('led-tout').addEventListener('click', () => {
+    const g = globalBrush()
+    document.querySelectorAll('.led-banc').forEach((banc) => {
+      banc.querySelector('.led-col').value = g.colour
+      banc.querySelector('.led-int').value = g.brightness
+      banc.querySelector('.led-int-val').textContent = `${g.brightness}%`
+    })
+    postLed('/led/all', g)
+  })
+  document.getElementById('led-eteindre').addEventListener('click', () => postLed('/led/clear', {}))
+  const slider = document.getElementById('led-intensite')
+  const label = document.getElementById('led-intensite-val')
+  slider.addEventListener('input', () => { label.textContent = `${slider.value}%` })
 }
 
 // ------------------------------------------------------------------ loop
@@ -301,7 +396,10 @@ el.raz.addEventListener('click', async () => {
   lastSeq = 0
 })
 
-buildOutputs()
+buildLamps()
+refreshLamps()
+buildLedBench()
+refreshLed()
 loadPorts()
 setInterval(loadPorts, 5000)
 loop()
