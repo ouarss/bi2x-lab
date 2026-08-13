@@ -9,7 +9,7 @@ on screen. That makes it the reference source for a capture.
 The main use is the outputs. The board inputs are already solved (see
 [TECHNICAL.md](TECHNICAL.md)). The outputs (the button lamps and the LED strips) are not. The
 `LAMP CHECK` screen drives every output in a known order, so it is the way to reverse the outbound
-frame format. See the plan in [OUTPUTS-TODO.md](OUTPUTS-TODO.md), and the capture methods in
+frame format. See the plan in [OUTPUTS.md](OUTPUTS.md), and the capture methods in
 [CAPTURE.md](CAPTURE.md).
 
 The screens below are from this cabinet. Names and values are transcribed as shown, so you do not
@@ -107,7 +107,7 @@ in a loop.
 This sequence is why AUTO is the key. Only one output changes at a time, and the screen names it and
 gives its colour. So each outbound frame in the capture maps to one (zone, colour) with no guessing.
 Let it loop several times: the repeats confirm the mapping and average out any dropped frame. This is
-step 1 and 2 of the outputs plan in [OUTPUTS-TODO.md](OUTPUTS-TODO.md).
+step 1 and 2 of the outputs plan in [OUTPUTS.md](OUTPUTS.md).
 
 ## MECHANISM CHECK
 

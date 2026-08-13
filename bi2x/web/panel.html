@@ -22,8 +22,16 @@
   </div>
 </header>
 
+<nav class="onglets" aria-label="Sections">
+  <button type="button" class="onglet actif" data-page="panel">Panel</button>
+  <button type="button" class="onglet" data-page="leds">LEDs</button>
+  <button type="button" class="onglet" data-page="debug">Debug</button>
+  <button type="button" class="onglet" data-page="howto">How it works</button>
+</nav>
+
 <p class="alerte" id="alerte" hidden></p>
 
+<div class="page" id="page-panel">
 <div class="colonnes">
 
   <main>
@@ -121,23 +129,6 @@
   <aside class="suivi">
 
     <section class="bloc">
-      <div class="bloc-titre">
-        <h2>Raw inputs</h2>
-        <span class="note">7 of 56 bits wired</span>
-      </div>
-      <div class="bits" id="bits"></div>
-      <table class="tableau serre">
-        <tbody>
-          <tr><td>Analog ch0 (VOL-L)</td><td class="v" id="ch0">0</td></tr>
-          <tr><td>Analog ch1 (VOL-R)</td><td class="v" id="ch1">0</td></tr>
-          <tr class="inutilise"><td>Analog ch2 (not wired)</td><td class="v" id="ch2">0</td></tr>
-          <tr class="inutilise"><td>Analog ch3 (not wired)</td><td class="v" id="ch3">0</td></tr>
-          <tr><td>Block header</td><td class="v mono" id="entete">-</td></tr>
-        </tbody>
-      </table>
-    </section>
-
-    <section class="bloc">
       <div class="bloc-titre"><h2>Service inputs</h2></div>
       <ul class="temoins">
         <li id="sys-TEST"><span class="led"></span>TEST</li>
@@ -175,7 +166,9 @@
 
   </aside>
 </div>
+</div>
 
+<div class="page" id="page-leds" hidden>
 <section class="bloc pleine-largeur" id="banc-led">
   <div class="bloc-titre">
     <h2>LED test bench</h2>
@@ -199,6 +192,436 @@
     <code id="led-trame-hex">-</code>
   </div>
 </section>
+</div>
+
+<div class="page" id="page-debug" hidden>
+<div class="debug-colonnes">
+
+  <section class="bloc">
+    <div class="bloc-titre">
+      <h2>Raw inputs</h2>
+      <span class="note">7 of 56 bits wired</span>
+    </div>
+    <div class="bits" id="bits"></div>
+    <table class="tableau serre">
+      <tbody>
+        <tr><td>Analog ch0 (VOL-L)</td><td class="v" id="ch0">0</td></tr>
+        <tr><td>Analog ch1 (VOL-R)</td><td class="v" id="ch1">0</td></tr>
+        <tr class="inutilise"><td>Analog ch2 (not wired)</td><td class="v" id="ch2">0</td></tr>
+        <tr class="inutilise"><td>Analog ch3 (not wired)</td><td class="v" id="ch3">0</td></tr>
+        <tr><td>Block header</td><td class="v mono" id="entete">-</td></tr>
+      </tbody>
+    </table>
+  </section>
+
+  <section class="bloc couches">
+    <div class="bloc-titre">
+      <h2>Last poll answer, layer by layer</h2>
+      <button type="button" class="lien" id="pause-debug">pause</button>
+    </div>
+    <p class="aide">Each layer explains the layer above it: from the bytes on the
+       wire down to what they mean. Press pause to freeze the view and read it.</p>
+
+    <p class="debug-vide" id="debug-vide">waiting for a poll answer…</p>
+
+    <div id="debug-corps" hidden>
+
+      <article class="couche">
+        <h3><span class="niveau">Layer 0</span> On the wire</h3>
+        <p class="legende">The bytes exactly as the serial port receives them:
+           a small labelled header, the obfuscated payload, one CRC byte.</p>
+        <code class="hex" id="hex-fil"></code>
+      </article>
+
+      <article class="couche">
+        <h3><span class="niveau">Layer 1</span> Framed and deobfuscated</h3>
+        <p class="legende">The header fields, read; the payload, passed back
+           through the tag-seeded keystream.</p>
+        <dl class="champs-trame" id="champs-trame"></dl>
+        <code class="hex" id="hex-payload"></code>
+      </article>
+
+      <article class="couche">
+        <h3><span class="niveau">Layer 2</span> Block and records</h3>
+        <p class="legende">After two command echoes: a 7-byte block header, then
+           <b id="nb-records">17</b> records of 13 bytes. Record 0 is the newest;
+           each record splits into 7 digital bytes and 6 analog bytes.</p>
+        <code class="hex" id="hex-bloc"></code>
+        <code class="hex" id="hex-record"></code>
+      </article>
+
+      <article class="couche">
+        <h3><span class="niveau">Layer 3</span> Meaning</h3>
+        <p class="legende">Record 0, read as inputs: 56 digital bits (active low)
+           and 4 analog channels of 16 bits.</p>
+        <div class="sens">
+          <div class="sens-groupe">
+            <h4>Buttons pressed</h4>
+            <div class="puces" id="sens-boutons"></div>
+          </div>
+          <div class="sens-groupe">
+            <h4>Knobs</h4>
+            <table class="tableau serre">
+              <tbody>
+                <tr><td>VOL-L</td><td class="v" id="sens-voll">-</td></tr>
+                <tr><td>VOL-R</td><td class="v" id="sens-volr">-</td></tr>
+              </tbody>
+            </table>
+          </div>
+          <div class="sens-groupe">
+            <h4>System inputs</h4>
+            <div class="puces" id="sens-system"></div>
+          </div>
+        </div>
+      </article>
+
+    </div>
+  </section>
+
+</div>
+</div>
+
+<div class="page" id="page-howto" hidden>
+<div class="howto">
+
+<svg class="defs-fleches" width="0" height="0" aria-hidden="true">
+  <defs>
+    <marker id="fl-gris" viewBox="0 0 10 10" refX="9" refY="5"
+            markerWidth="6.5" markerHeight="6.5" orient="auto-start-reverse">
+      <path d="M0 0 L10 5 L0 10 z" class="pointe-grise"/>
+    </marker>
+    <marker id="fl-cyan" viewBox="0 0 10 10" refX="9" refY="5"
+            markerWidth="6.5" markerHeight="6.5" orient="auto-start-reverse">
+      <path d="M0 0 L10 5 L0 10 z" class="pointe-cyan"/>
+    </marker>
+  </defs>
+</svg>
+
+<section class="bloc">
+  <div class="bloc-titre">
+    <h2>Reading the inputs</h2>
+    <span class="direction">board &#8594; host</span>
+  </div>
+  <p class="aide">The board never speaks first. The host asks, the board answers.
+     Five steps turn the answer into buttons and knobs. Each step explains the
+     output of the step before it.</p>
+
+  <article class="etape">
+    <h3><span class="numero">1</span>Poll<button type="button" class="btn-code" data-etape="Poll">code</button></h3>
+    <p class="legende">You send a short request. The board answers with the WHOLE
+       panel at once: all buttons and both knobs, 17 samples deep. There is no
+       per-input request.</p>
+    <svg class="schema" viewBox="0 0 660 132" role="img"
+         aria-label="The host sends a request, the board answers with one block">
+      <rect class="boite" x="30" y="36" width="140" height="60" rx="8"/>
+      <text x="100" y="71" text-anchor="middle">HOST</text>
+      <rect class="boite" x="490" y="36" width="140" height="60" rx="8"/>
+      <text x="560" y="71" text-anchor="middle">BOARD</text>
+      <line class="fil" x1="170" y1="52" x2="484" y2="52" marker-end="url(#fl-gris)"/>
+      <text class="petit" x="330" y="44" text-anchor="middle">request, about 25 bytes</text>
+      <line class="fil fil-cyan" x1="490" y1="82" x2="176" y2="82" marker-end="url(#fl-cyan)"/>
+      <text class="petit" x="330" y="104" text-anchor="middle">answer: one 234-byte block</text>
+      <text class="petit" x="330" y="120" text-anchor="middle">all buttons + both knobs, 17 samples deep</text>
+    </svg>
+  </article>
+
+  <div class="fleche-etape" aria-hidden="true"></div>
+
+  <article class="etape">
+    <h3><span class="numero">2</span>The frame<button type="button" class="btn-code" data-etape="The frame">code</button></h3>
+    <p class="legende">Every message, either way (a request you send or an answer the
+       board returns), is one frame:
+       <code>AA | node | tag | size | flags | payload | crc7</code>.
+       The size is a varint: one or two bytes.</p>
+    <svg class="schema" viewBox="0 0 660 78" role="img"
+         aria-label="Frame layout: AA, node, tag, size, flags, payload, crc7">
+      <rect class="seg seg-sof" x="8" y="14" width="54" height="34"/>
+      <text class="mono" x="35" y="36" text-anchor="middle">AA</text>
+      <rect class="seg seg-node" x="62" y="14" width="54" height="34"/>
+      <text x="89" y="36" text-anchor="middle">node</text>
+      <rect class="seg seg-tag" x="116" y="14" width="54" height="34"/>
+      <text x="143" y="36" text-anchor="middle">tag</text>
+      <rect class="seg seg-size" x="170" y="14" width="76" height="34"/>
+      <text x="208" y="36" text-anchor="middle">size</text>
+      <rect class="seg seg-flags" x="246" y="14" width="54" height="34"/>
+      <text x="273" y="36" text-anchor="middle">flags</text>
+      <rect class="seg seg-payload" x="300" y="14" width="290" height="34"/>
+      <text x="445" y="36" text-anchor="middle">payload</text>
+      <rect class="seg seg-crc" x="590" y="14" width="62" height="34"/>
+      <text x="621" y="36" text-anchor="middle">crc7</text>
+      <text class="petit" x="35" y="66" text-anchor="middle">start</text>
+      <text class="petit" x="89" y="66" text-anchor="middle">1 byte</text>
+      <text class="petit" x="143" y="66" text-anchor="middle">seed</text>
+      <text class="petit" x="208" y="66" text-anchor="middle">varint, 1-2 bytes</text>
+      <text class="petit" x="273" y="66" text-anchor="middle">1 byte</text>
+      <text class="petit" x="445" y="66" text-anchor="middle">n bytes, scrambled</text>
+      <text class="petit" x="621" y="66" text-anchor="middle">1 byte</text>
+    </svg>
+    <div class="exemple">
+      <span class="etiquette-trame">header on the wire</span>
+      <code class="hex"><span class="champ champ-sof" data-nom="start">AA</span><span class="champ champ-node" data-nom="node">03</span><span class="champ champ-tag" data-nom="tag">D7</span><span class="champ champ-size" data-nom="size, varint = 234">C1 6A</span><span class="champ champ-flags" data-nom="flags">5D</span></code>
+    </div>
+  </article>
+
+  <div class="fleche-etape" aria-hidden="true"></div>
+
+  <article class="etape">
+    <h3><span class="numero">3</span>Unscramble<button type="button" class="btn-code" data-etape="Unscramble">code</button></h3>
+    <p class="legende">The <span class="mot-payload">payload</span> arrives scrambled by a
+       small reversible generator seeded from the frame's <span class="mot-tag">tag</span>.<br>
+       One reversible step turns it back to plain bytes. A byte whose odd bits are all set
+       (like <code>FF</code>) passes through unchanged.</p>
+    <svg class="schema" viewBox="0 0 660 130" role="img"
+         aria-label="Scrambled bytes pass through the tag-seeded generator and become plain bytes">
+      <rect class="boite-douce" x="250" y="10" width="160" height="30" rx="6"/>
+      <text class="petit" x="330" y="29" text-anchor="middle">keystream generator</text>
+      <text class="petit" x="240" y="29" text-anchor="end">seed = tag</text>
+      <line class="fil pointille" x1="330" y1="40" x2="330" y2="70" marker-end="url(#fl-gris)"/>
+      <rect class="seg seg-tag" x="30" y="60" width="180" height="40" rx="6"/>
+      <text x="120" y="84" text-anchor="middle">scrambled bytes</text>
+      <rect class="seg seg-node" x="450" y="60" width="180" height="40" rx="6"/>
+      <text x="540" y="84" text-anchor="middle">plain bytes</text>
+      <line class="fil" x1="210" y1="80" x2="444" y2="80" marker-end="url(#fl-gris)"/>
+      <text class="petit" x="330" y="118" text-anchor="middle">one reversible pass, the same in both directions</text>
+    </svg>
+    <div class="exemple">
+      <span class="etiquette-trame">the same nine bytes, both sides of the pass</span>
+      <code class="hex"><span class="champ champ-scrambled" data-nom="scrambled">70 11 2C 2E 4F 5C 64 3A 17</span></code>
+      <code class="hex"><span class="champ champ-plain" data-nom="plain">03 21 05 00 00 00 01 00 7C</span></code>
+    </div>
+  </article>
+
+  <div class="fleche-etape" aria-hidden="true"></div>
+
+  <article class="etape">
+    <h3><span class="numero">4</span>Block and records<button type="button" class="btn-code" data-etape="Block and records">code</button></h3>
+    <p class="legende">The plain payload is a 7-byte block header, then 17
+       records. Each record is the full panel at one instant: 7 bytes of digital
+       inputs + 6 bytes of analog.</p>
+    <svg class="schema" viewBox="0 0 660 150" role="img"
+         aria-label="Block layout: a 7-byte header then 17 records, record 0 splits into digital and analog">
+      <rect class="seg seg-sof" x="8" y="12" width="120" height="32"/>
+      <text x="68" y="32" text-anchor="middle">header, 7 B</text>
+      <rect class="seg seg-node" x="128" y="12" width="140" height="32"/>
+      <text x="198" y="32" text-anchor="middle">record 0</text>
+      <rect class="seg seg-payload" x="268" y="12" width="140" height="32"/>
+      <text x="338" y="32" text-anchor="middle">record 1</text>
+      <text x="443" y="33" text-anchor="middle">&#8230;</text>
+      <rect class="seg seg-payload" x="478" y="12" width="140" height="32"/>
+      <text x="548" y="32" text-anchor="middle">record 16</text>
+      <path class="pointille" d="M128 44 L60 84"/>
+      <path class="pointille" d="M268 44 L600 84"/>
+      <rect class="seg seg-node" x="60" y="86" width="300" height="34"/>
+      <text x="210" y="107" text-anchor="middle">7 bytes digital</text>
+      <rect class="seg seg-tag" x="360" y="86" width="240" height="34"/>
+      <text x="480" y="107" text-anchor="middle">6 bytes analog</text>
+      <text class="petit" x="330" y="140" text-anchor="middle">record 0, zoomed: the whole panel at one instant, 13 bytes</text>
+    </svg>
+    <div class="exemple">
+      <span class="etiquette-trame">block header, then record 0</span>
+      <code class="hex"><span class="champ champ-header" data-nom="block header">D6 00 00 00 00 00 00</span></code>
+      <code class="hex"><span class="champ champ-digital" data-nom="digital">FF FF FF FF FF 7F FF</span>| <span class="champ champ-analog" data-nom="analog">84 51 FA 00 20 03</span></code>
+    </div>
+  </article>
+
+  <div class="fleche-etape" aria-hidden="true"></div>
+
+  <article class="etape">
+    <h3><span class="numero">5</span>Meaning<button type="button" class="btn-code" data-etape="Meaning">code</button></h3>
+    <p class="legende">The 7 digital bytes are 56 input bits; a button is active
+       LOW (bit 0 = pressed). The 6 analog bytes are four 12-bit channels widened
+       to 16 bits: VOL-L and VOL-R (two are unused). A knob is an absolute counter
+       that wraps once per turn, so you read the wrapped difference between two
+       samples.</p>
+    <svg class="schema" viewBox="0 0 660 170" role="img"
+         aria-label="Record 0 becomes 56 button bits and two knob dials">
+      <rect class="boite" x="14" y="62" width="104" height="40" rx="6"/>
+      <text x="66" y="86" text-anchor="middle">record 0</text>
+      <line class="fil" x1="118" y1="70" x2="172" y2="70" marker-end="url(#fl-gris)"/>
+      <line class="fil" x1="118" y1="96" x2="440" y2="96" marker-end="url(#fl-gris)"/>
+      <rect class="cellules-connues" x="264" y="28" width="98" height="14"/>
+      <rect class="grille" x="180" y="28" width="196" height="56"/>
+      <path class="grille" d="M194 28V84M208 28V84M222 28V84M236 28V84M250 28V84M264 28V84M278 28V84M292 28V84M306 28V84M320 28V84M334 28V84M348 28V84M362 28V84M180 42H376M180 56H376M180 70H376"/>
+      <text class="petit" x="278" y="20" text-anchor="middle">56 input bits</text>
+      <text class="petit" x="278" y="114" text-anchor="middle">active LOW &#183; tinted: the 7 wired buttons</text>
+      <circle class="cadran-svg" cx="480" cy="96" r="26"/>
+      <line class="aiguille-svg" x1="480" y1="96" x2="478" y2="116"/>
+      <circle class="cadran-svg" cx="585" cy="96" r="26"/>
+      <line class="aiguille-svg" x1="585" y1="96" x2="599" y2="82"/>
+      <text class="petit" x="480" y="140" text-anchor="middle">VOL-L</text>
+      <text class="petit" x="585" y="140" text-anchor="middle">VOL-R</text>
+      <text class="petit" x="532" y="160" text-anchor="middle">absolute counters, wrap once per turn</text>
+    </svg>
+    <div class="exemple">
+      <span class="etiquette-trame">record 0, read out</span>
+      <code class="hex"><span class="champ champ-digital" data-nom="digital">FF FF FF FF FF 7F FF</span></code>
+      <p class="hexnote">&#8594; no button pressed (a pressed button pulls its bit to 0).</p>
+      <code class="hex"><span class="champ champ-analog" data-nom="analog">84 51 FA 00 20 03</span></code>
+      <p class="hexnote">&#8594; VOL-L = 33880 (529 on the 0..1023 scale) &#183;
+         VOL-R = 8097 (126 / 1023).</p>
+    </div>
+    <div class="encadre-wrap"><b>Wrap:</b> old = 65500, new = 40 &#8594; the move
+       is <b>+76</b>, not &#8722;65460. Always read the wrapped difference
+       between two samples.</div>
+  </article>
+</section>
+
+<section class="bloc">
+  <div class="bloc-titre">
+    <h2>Driving the outputs</h2>
+    <span class="direction sortie">host &#8594; board</span>
+  </div>
+  <p class="aide">One command paints the LED strips, one command sets the button
+     lamps. Both travel the same road: pack, scramble, frame, send.</p>
+
+  <article class="etape">
+    <h3><span class="numero">1</span>Choose the command<button type="button" class="btn-code" data-etape="Choose the command">code</button></h3>
+    <p class="legende"><code>03 21</code> (SetTapeLedData) paints a LED strip;
+       one pixel is a 15-bit 5-5-5 RGB colour. <code>03 11</code> (SetOutputs)
+       sets the button lamps, which ride inside the poll frame.</p>
+    <svg class="schema" viewBox="0 0 660 120" role="img"
+         aria-label="Two commands: SetTapeLedData paints LED strips, SetOutputs sets the lamps">
+      <rect class="boite" x="20" y="16" width="300" height="88" rx="8"/>
+      <text class="mono cmd" x="40" y="44">03 21</text>
+      <text x="100" y="44">SetTapeLedData</text>
+      <text class="petit" x="40" y="68">paints one LED strip</text>
+      <text class="petit" x="40" y="86">1 pixel = 15-bit 5-5-5 RGB colour</text>
+      <rect class="boite" x="344" y="16" width="296" height="88" rx="8"/>
+      <text class="mono cmd" x="364" y="44">03 11</text>
+      <text x="424" y="44">SetOutputs</text>
+      <text class="petit" x="364" y="68">sets the 7 button lamps</text>
+      <text class="petit" x="364" y="86">rides inside the poll frame</text>
+    </svg>
+    <div class="exemple">
+      <span class="etiquette-trame">LED command, plain payload</span>
+      <code class="hex"><span class="champ champ-cmd" data-nom="SetTapeLedData">03 21</span><span class="champ champ-strip" data-nom="strip">05</span><span class="champ champ-reserve" data-nom="reserved">00</span><span class="champ champ-offset" data-nom="offset">00 00</span><span class="champ champ-count" data-nom="count">03</span><span class="champ champ-pixel" data-nom="3 pixels of red, 5-5-5">00 7C 00 7C 00 7C</span></code>
+    </div>
+    <div class="exemple">
+      <span class="etiquette-trame">lamp command, plain payload, 48 bytes</span>
+      <code class="hex"><span class="champ champ-cmd" data-nom="SetOutputs">03 11</span><span class="champ champ-master" data-nom="byte 0, master">FF</span><span class="champ champ-zeros" data-nom="bytes 1..16">00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00</span><span class="champ champ-lampe" data-nom="byte 17, START lamp">FF</span><span class="champ champ-zeros" data-nom="bytes 18..43, other lamps off">00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00</span><span class="champ champ-poll" data-nom="Poll">03 10</span></code>
+    </div>
+  </article>
+
+  <div class="fleche-etape" aria-hidden="true"></div>
+
+  <article class="etape">
+    <h3><span class="numero">2</span>Pack<button type="button" class="btn-code" data-etape="Pack">code</button></h3>
+    <p class="legende">The payload is packed with a small sliding-window scheme:
+       a compact encoding the board unpacks on its side. The 13-byte LED payload
+       above packs into 9 bytes.</p>
+    <svg class="schema" viewBox="0 0 660 100" role="img"
+         aria-label="The plain payload packs into a shorter payload">
+      <rect class="seg seg-node" x="20" y="30" width="260" height="38" rx="6"/>
+      <text x="150" y="54" text-anchor="middle">plain payload, 13 bytes</text>
+      <line class="fil" x1="280" y1="49" x2="424" y2="49" marker-end="url(#fl-gris)"/>
+      <text class="petit" x="353" y="40" text-anchor="middle">pack</text>
+      <text class="petit" x="353" y="66" text-anchor="middle">sliding window</text>
+      <rect class="seg seg-payload" x="430" y="30" width="170" height="38" rx="6"/>
+      <text x="515" y="54" text-anchor="middle">packed, 9 bytes</text>
+      <text class="petit" x="515" y="88" text-anchor="middle">shorter on the wire</text>
+    </svg>
+  </article>
+
+  <div class="fleche-etape" aria-hidden="true"></div>
+
+  <article class="etape">
+    <h3><span class="numero">3</span>Scramble + checksum<button type="button" class="btn-code" data-etape="Scramble + checksum">code</button></h3>
+    <p class="legende">The packed bytes are scrambled with the same tag-seeded
+       generator, and a 7-bit checksum of the PLAIN payload is appended and
+       scrambled with them.</p>
+    <svg class="schema" viewBox="0 0 660 130" role="img"
+         aria-label="Packed bytes plus a crc7 of the plain payload are scrambled into the wire payload">
+      <rect class="pointille" x="60" y="12" width="170" height="30" rx="6"/>
+      <text class="petit" x="145" y="31" text-anchor="middle">plain payload</text>
+      <path class="fil pointille" d="M205 42 C214 58 220 66 224 72" marker-end="url(#fl-gris)"/>
+      <text class="petit" x="240" y="60">crc7 of the plain bytes</text>
+      <rect class="seg seg-payload" x="60" y="78" width="136" height="36"/>
+      <text x="128" y="100" text-anchor="middle">packed</text>
+      <rect class="seg seg-crc" x="196" y="78" width="56" height="36"/>
+      <text x="224" y="100" text-anchor="middle">crc7</text>
+      <line class="fil" x1="252" y1="96" x2="434" y2="96" marker-end="url(#fl-gris)"/>
+      <text class="petit" x="344" y="86" text-anchor="middle">scramble</text>
+      <text class="petit" x="344" y="112" text-anchor="middle">seeded from tag</text>
+      <rect class="seg seg-tag" x="440" y="78" width="180" height="36"/>
+      <text x="530" y="100" text-anchor="middle">wire payload</text>
+    </svg>
+    <div class="exemple">
+      <span class="etiquette-trame">LED example: packed + crc7, scrambled for the wire</span>
+      <code class="hex"><span class="champ champ-scrambled" data-nom="10 bytes: 9 packed + 1 crc7, scrambled">7B 33 08 2B BC 5C 19 3B 33 34</span></code>
+    </div>
+  </article>
+
+  <div class="fleche-etape" aria-hidden="true"></div>
+
+  <article class="etape">
+    <h3><span class="numero">4</span>Frame it<button type="button" class="btn-code" data-etape="Frame it">code</button></h3>
+    <p class="legende">Wrap as <code>AA | node=02 | tag | size | flags | payload
+       | crc7</code>. The flags byte carries a 4-bit header checksum.</p>
+    <svg class="schema" viewBox="0 0 660 78" role="img"
+         aria-label="The final frame: AA, node 02, tag, size, flags, scrambled payload, crc7">
+      <rect class="seg seg-sof" x="8" y="14" width="54" height="34"/>
+      <text class="mono" x="35" y="36" text-anchor="middle">AA</text>
+      <rect class="seg seg-node" x="62" y="14" width="54" height="34"/>
+      <text class="mono" x="89" y="36" text-anchor="middle">02</text>
+      <rect class="seg seg-tag" x="116" y="14" width="54" height="34"/>
+      <text class="mono" x="143" y="36" text-anchor="middle">37</text>
+      <rect class="seg seg-size" x="170" y="14" width="76" height="34"/>
+      <text class="mono" x="208" y="36" text-anchor="middle">0D</text>
+      <rect class="seg seg-flags" x="246" y="14" width="54" height="34"/>
+      <text class="mono" x="273" y="36" text-anchor="middle">90</text>
+      <rect class="seg seg-payload" x="300" y="14" width="290" height="34"/>
+      <text x="445" y="36" text-anchor="middle">scrambled payload</text>
+      <rect class="seg seg-crc" x="590" y="14" width="62" height="34"/>
+      <text class="mono" x="621" y="36" text-anchor="middle">07</text>
+      <text class="petit" x="35" y="66" text-anchor="middle">start</text>
+      <text class="petit" x="89" y="66" text-anchor="middle">node</text>
+      <text class="petit" x="143" y="66" text-anchor="middle">tag</text>
+      <text class="petit" x="208" y="66" text-anchor="middle">size = 13</text>
+      <text class="petit" x="273" y="66" text-anchor="middle">flags + crc4</text>
+      <text class="petit" x="445" y="66" text-anchor="middle">10 bytes</text>
+      <text class="petit" x="621" y="66" text-anchor="middle">crc7</text>
+    </svg>
+    <div class="exemple">
+      <span class="etiquette-trame">the LED command on the wire: strip 5, 3 red pixels</span>
+      <code class="hex"><span class="champ champ-sof" data-nom="start">AA</span><span class="champ champ-node" data-nom="node">02</span><span class="champ champ-tag" data-nom="tag">37</span><span class="champ champ-size" data-nom="size = 13">0D</span><span class="champ champ-flags" data-nom="flags + crc4">90</span><span class="champ champ-scrambled" data-nom="scrambled payload">7B 33 08 2B BC 5C 19 3B 33 34</span><span class="champ champ-crc7" data-nom="crc7">07</span></code>
+    </div>
+  </article>
+
+  <div class="fleche-etape" aria-hidden="true"></div>
+
+  <article class="etape">
+    <h3><span class="numero">5</span>Send<button type="button" class="btn-code" data-etape="Send">code</button></h3>
+    <p class="legende">The board unpacks the frame and lights the LED or the
+       lamp.</p>
+    <svg class="schema" viewBox="0 0 660 120" role="img"
+         aria-label="The host sends the frame, the board lights the LED or lamp">
+      <rect class="boite" x="30" y="32" width="130" height="56" rx="8"/>
+      <text x="95" y="66" text-anchor="middle">HOST</text>
+      <line class="fil" x1="160" y1="60" x2="294" y2="60" marker-end="url(#fl-gris)"/>
+      <text class="petit" x="228" y="50" text-anchor="middle">frame</text>
+      <rect class="boite" x="300" y="32" width="130" height="56" rx="8"/>
+      <text x="365" y="66" text-anchor="middle">BOARD</text>
+      <line class="fil" x1="430" y1="60" x2="512" y2="60" marker-end="url(#fl-gris)"/>
+      <text class="petit" x="471" y="50" text-anchor="middle">unpack</text>
+      <circle class="lampe-svg" cx="560" cy="60" r="20"/>
+      <path class="rayon" d="M584 36 L592 28 M584 84 L592 92 M536 36 L528 28 M536 84 L528 92 M560 32 L560 22 M560 88 L560 98"/>
+      <text class="petit" x="560" y="114" text-anchor="middle">light</text>
+    </svg>
+  </article>
+</section>
+
+<div class="voile-code" id="voile-code" hidden>
+  <div class="modal-code" role="dialog" aria-modal="true" aria-labelledby="modal-code-titre">
+    <div class="modal-code-barre">
+      <h3 id="modal-code-titre">step</h3>
+      <button type="button" class="fermer-code" id="fermer-code" aria-label="close">&#215;</button>
+    </div>
+    <pre class="code-python"><code id="modal-code-corps"></code></pre>
+  </div>
+</div>
+
+</div>
+</div>
 
 <footer class="pied">
   <p>Turn each volume slowly through a full revolution: the needle should sweep 360°

@@ -3,10 +3,12 @@
 const BUTTONS = ['START', 'BT-A', 'BT-B', 'BT-C', 'BT-D', 'FX-L', 'FX-R']
 const SYSTEM = ['TEST', 'SERVICE', 'COIN', 'HEADPHONE']
 const ALL_INPUTS = [...BUTTONS, ...SYSTEM]
-// The page also works when opened from somewhere else (a local web server, or the
-// file itself): requests then go to the panel server explicitly instead of to the
-// page's own origin, which would have no /state to answer with.
-const API = location.port === '8740' ? '' : 'http://127.0.0.1:8740'
+// The page also works when opened from somewhere else (the file itself, or a
+// port-less local web server): requests then go to the default panel server
+// explicitly. Served by panel.py itself (any --http port), the page talks to
+// its own origin.
+const API = (location.protocol === 'file:' || !location.port)
+  ? 'http://127.0.0.1:8740' : ''
 const PERIOD = 33            // ms, about 30 refreshes per second
 const MAX_JOURNAL = 200
 
@@ -31,6 +33,9 @@ const knobs = {
 let lastSeq = 0
 const previous = { volL: null, volR: null }
 const moving = { volL: 0, volR: 0 }
+
+// One byte as two uppercase hex digits.
+const hex2 = (b) => b.toString(16).padStart(2, '0').toUpperCase()
 
 // ------------------------------------------------------------------ volumes
 
@@ -167,8 +172,7 @@ const updateRaw = (state) => {
   }
   const entete = document.getElementById('entete')
   if (entete && state.header) {
-    entete.textContent = state.header
-      .map((b) => b.toString(16).padStart(2, '0').toUpperCase()).join(' ')
+    entete.textContent = state.header.map(hex2).join(' ')
   }
 }
 
@@ -324,6 +328,209 @@ const buildLedBench = () => {
   slider.addEventListener('input', () => { label.textContent = `${slider.value}%` })
 }
 
+// ------------------------------------------------------------------ onglets
+
+// One page shown at a time; the active tab lives in a plain variable, and the
+// URL hash mirrors it so a tab can be opened directly (#leds, #debug, #howto).
+const PAGES = ['panel', 'leds', 'debug', 'howto']
+let activeTab = PAGES.includes(location.hash.slice(1)) ? location.hash.slice(1) : 'panel'
+
+const showTab = (nom) => {
+  activeTab = nom
+  for (const page of PAGES) {
+    document.getElementById(`page-${page}`).hidden = page !== nom
+    document.querySelector(`.onglets [data-page="${page}"]`)
+      .classList.toggle('actif', page === nom)
+  }
+}
+
+const buildTabs = () => {
+  document.querySelector('.onglets').addEventListener('click', (e) => {
+    const nom = e.target.dataset.page
+    if (!nom) return
+    showTab(nom)
+    history.replaceState(null, '', `#${nom}`)
+  })
+  showTab(activeTab)
+}
+
+// ----------------------------------------------------- debug, layer by layer
+
+// The poll answer decoded level by level by the server (/debug). Refreshed a few
+// times per second only: this view is for reading, not for reacting.
+const DEBUG_PERIOD = 300
+let debugPaused = false
+
+const fieldSpan = (nom, hexa) =>
+  `<span class="champ champ-${nom.toLowerCase()}" data-nom="${nom}">${spaced(hexa.toUpperCase())}</span>`
+
+const chips = (host, entries) => {
+  host.innerHTML = entries.length
+    ? entries.map(([nom, on]) =>
+        `<span class="puce${on ? ' actif' : ''}">${nom}</span>`).join('')
+    : '<span class="puce">none</span>'
+}
+
+const renderDebug = ({ connected, layers }) => {
+  const vide = document.getElementById('debug-vide')
+  const corps = document.getElementById('debug-corps')
+  if (!layers) {
+    vide.hidden = false
+    corps.hidden = true
+    vide.textContent = connected
+      ? 'waiting for a poll answer…'
+      : 'board offline, waiting for a poll answer…'
+    return
+  }
+  vide.hidden = true
+  corps.hidden = false
+
+  // Layer 0: the raw bytes, header fields labelled.
+  document.getElementById('hex-fil').innerHTML =
+    layers.wire.map((w) => fieldSpan(w.field, w.hex)).join('')
+
+  // Layer 1: the header read out, and the deobfuscated payload.
+  document.getElementById('champs-trame').innerHTML = [
+    ['node', `0x${hex2(layers.node)}`],
+    ['tag', `0x${hex2(layers.tag)}`],
+    ['size', `${layers.size} bytes`],
+    ['mode', `${layers.encoding} (${layers.mode})`],
+    ['obfuscated', layers.obfuscated ? 'yes' : 'no'],
+    ['header CRC4', layers.crc4_ok ? 'ok' : 'BAD'],
+  ].map(([k, v]) => `<div><dt>${k}</dt><dd>${v}</dd></div>`).join('')
+  const bloc = layers.payload_hex.slice(layers.prefix_hex.length)
+  document.getElementById('hex-payload').innerHTML =
+    fieldSpan('echoes', layers.prefix_hex) + spaced(bloc.toUpperCase())
+
+  // Layer 2: the block header, and record 0 cut into digital | analog.
+  document.getElementById('nb-records').textContent = layers.records
+  document.getElementById('hex-bloc').innerHTML =
+    fieldSpan('header', layers.block_header_hex)
+  document.getElementById('hex-record').innerHTML =
+    fieldSpan('digital', layers.digital_hex) + fieldSpan('analog', layers.analog_hex)
+
+  // Layer 3: what record 0 means.
+  chips(document.getElementById('sens-boutons'),
+    BUTTONS.map((nom) => [nom, layers.pressed.includes(nom)]))
+  document.getElementById('sens-voll').textContent =
+    `${layers.volL.raw} raw, ${layers.volL.graduation} / 1023`
+  document.getElementById('sens-volr').textContent =
+    `${layers.volR.raw} raw, ${layers.volR.graduation} / 1023`
+  chips(document.getElementById('sens-system'),
+    SYSTEM.map((nom) => [nom, Boolean(layers.system?.[nom])]))
+}
+
+const debugLoop = async () => {
+  if (activeTab === 'debug' && !debugPaused) {
+    try {
+      const response = await fetch(`${API}/debug`, { cache: 'no-store' })
+      renderDebug(await response.json())
+    } catch { /* server not up yet */ }
+  }
+  setTimeout(debugLoop, DEBUG_PERIOD)
+}
+
+const buildDebug = () => {
+  const bouton = document.getElementById('pause-debug')
+  bouton.addEventListener('click', () => {
+    debugPaused = !debugPaused
+    bouton.textContent = debugPaused ? 'resume' : 'pause'
+    document.querySelector('.couches').classList.toggle('fige', debugPaused)
+  })
+}
+
+// -------------------------------------------- how it works, code snippets
+
+// One shared modal; each step's "code" button fills it by step title.
+const SNIPPETS = {
+  'Poll':
+`sp.write(poll[tag & 0x7F])        # ask for the panel state
+tag = (tag + 1) & 0xFF
+answer = sp.read(512)             # one 234-byte block, 17 samples deep`,
+
+  'The frame':
+`node, tag = raw[1], raw[2]        # AA | node | tag | size | flags | payload | crc7
+j, size = 3, 0
+while raw[j] & 0x80:              # size is a varint
+    size = (size << 6) | (raw[j] & 0x3F); j += 1
+size = (size << 7) | (raw[j] & 0x7F)
+flags = raw[j + 1]
+payload = raw[j + 2 : j + 2 + size]`,
+
+  'Unscramble':
+`def unscramble(payload, tag):
+    x = (tag ^ 0xAA) & 0xFFFFFFFF
+    out = bytearray()
+    for b in payload:
+        if (~b & 0xAA) & 0xFF == 0:      # odd bits all set (FF, AA): passes through
+            out.append(b); continue
+        x = (x * 0x41C64E6D + 0x3039) & 0xFFFFFFFF
+        out.append(b ^ (x & (0x55 if b & 0x80 else 0x7F)))
+    return bytes(out)`,
+
+  'Block and records':
+`block = payload[6:6 + 228]                  # skip the 6-byte prefix
+header = block[:7]                          # 7-byte block header
+records = [block[7 + 13*i : 7 + 13*(i + 1)] # 17 records of 13 bytes
+          for i in range(17)]
+record0 = records[0]                        # the newest sample`,
+
+  'Meaning':
+`BUTTONS = {"START": 6, "BT-A": 7, "BT-B": 8, "BT-C": 9,
+           "BT-D": 10, "FX-L": 11, "FX-R": 12}
+digital = int.from_bytes(record0[:7], "little")   # 56 bits, active low
+pressed = [n for n, bit in BUTTONS.items()
+           if not (digital >> bit) & 1]           # bit 0 = pressed
+def knob_delta(new, old):                         # wrapped difference
+    return ((new - old + 32768) & 0xFFFF) - 32768`,
+
+  'Choose the command':
+`def pixel(r, g, b):                    # r, g, b in 0..31
+    w = (r << 10) | (g << 5) | b       # 15-bit 5-5-5 RGB
+    return bytes([w & 0xFF, w >> 8])   # little-endian
+payload = (b"\\x03\\x21" + bytes([strip, 0])         # SetTapeLedData
+           + offset.to_bytes(2, "little")
+           + bytes([count]) + pixels)`,
+
+  'Pack':
+`wire = compress(payload)   # sliding-window pack (85-byte window);
+                           # the board unpacks it on its side`,
+
+  'Scramble + checksum':
+`stream = compress(payload) + bytes([crc7(payload)])   # crc7 of the PLAIN payload
+wire = scramble(stream, tag ^ 0x55)   # same generator, seeded tag ^ 0x55`,
+
+  'Frame it':
+`flags = (4 << 5) | 0x10                       # mode 4, scrambled
+size = varint(len(payload))
+head = bytes([node, tag]) + size + bytes([flags & 0xF0])
+flags |= crc4(head)                           # 4-bit header sum in the low nibble
+frame = bytes([0xAA, node, tag]) + size + bytes([flags]) + wire`,
+
+  'Send':
+`sp.write(frame)   # the board unpacks it and lights the LED or the lamp`,
+}
+
+const openCode = (titre) => {
+  document.getElementById('modal-code-titre').textContent = titre
+  document.getElementById('modal-code-corps').textContent = SNIPPETS[titre] || ''
+  document.getElementById('voile-code').hidden = false
+}
+
+const closeCode = () => {
+  document.getElementById('voile-code').hidden = true
+}
+
+const buildCode = () => {
+  for (const bouton of document.querySelectorAll('.btn-code')) {
+    bouton.addEventListener('click', () => openCode(bouton.dataset.etape))
+  }
+  const voile = document.getElementById('voile-code')
+  voile.addEventListener('click', (e) => { if (e.target === voile) closeCode() })
+  document.getElementById('fermer-code').addEventListener('click', closeCode)
+  document.addEventListener('keydown', (e) => { if (e.key === 'Escape') closeCode() })
+}
+
 // ------------------------------------------------------------------ loop
 
 const render = (state) => {
@@ -343,13 +550,18 @@ const render = (state) => {
     ? `${Math.round((100 * state.crc_ok) / state.frames)} %`
     : '-'
 
-  for (const nom of BUTTONS) updateButton(nom, state.buttons?.[nom])
-  updateKnob('volL', state.volL || 0, state.gradL || 0, state.turnsL || 0)
-  updateKnob('volR', state.volR || 0, state.gradR || 0, state.turnsR || 0)
-  updateSystem(state.system)
-  updateTable(state.tracking, state.buttons, state.system)
-  updateRaw(state)
-  appendEvents(state.events)
+  // Only touch the DOM of the tab on screen: the header above stays live everywhere,
+  // but the panel widgets and the raw view are hidden on the other tabs.
+  if (activeTab === 'panel') {
+    for (const nom of BUTTONS) updateButton(nom, state.buttons?.[nom])
+    updateKnob('volL', state.volL || 0, state.gradL || 0, state.turnsL || 0)
+    updateKnob('volR', state.volR || 0, state.gradR || 0, state.turnsR || 0)
+    updateSystem(state.system)
+    updateTable(state.tracking, state.buttons, state.system)
+    appendEvents(state.events)
+  } else if (activeTab === 'debug') {
+    updateRaw(state)
+  }
 }
 
 const loop = async () => {
@@ -396,6 +608,9 @@ el.raz.addEventListener('click', async () => {
   lastSeq = 0
 })
 
+buildTabs()
+buildDebug()
+buildCode()
 buildLamps()
 refreshLamps()
 buildLedBench()
@@ -403,3 +618,4 @@ refreshLed()
 loadPorts()
 setInterval(loadPorts, 5000)
 loop()
+debugLoop()

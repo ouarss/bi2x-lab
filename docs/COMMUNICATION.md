@@ -56,15 +56,18 @@ sp.write(poll[tag & 0x7F])   # send the pre-encoded version for this tag
 tag = (tag + 1) & 0xFF        # 0, 1, 2, ..., 127, 0, 1, ... (128 values)
 ```
 
-This project does not implement the compression of the request payload. So it cannot build the request
-for a given tag. So it records the 128 versions (one per tag) and replays them. That is all
-`replay.json` is: the startup sequence, and the 128 encodings of the one poll request.
+The tools now implement the outbound payload compression (`bi2x/encoder.py`), so a poll request can
+be built rather than replayed. By default the tools still replay the 128 recorded versions (one per
+tag), because they are known good and there is no need to rebuild them; they only build a poll frame
+when it must carry an output state (see the button lamps below). `replay.json` still holds the
+startup sequence, which is not reversed.
 
 ## The outputs (lamps, LEDs) are not in replay.json
 
-`replay.json` has no line for the outputs. Nothing is ever written to the board. To drive the lamps or
-the LED strips, the tools would need to build outbound frames. This is not done (see the known gap in
-[TECHNICAL.md](TECHNICAL.md)). So the toggles in the web panel do nothing.
+`replay.json` has no line for the outputs. To drive the lamps or the LED strips, the tools build
+outbound frames themselves with `bi2x/encoder.py`. The LED strips are sent as their own frames; the
+button lamps ride inside the poll frame, so once a lamp is driven the panel builds every poll frame
+itself instead of replaying it. See [OUTPUTS.md](OUTPUTS.md).
 
 ## Summary
 

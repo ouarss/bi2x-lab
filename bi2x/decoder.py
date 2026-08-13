@@ -122,7 +122,8 @@ def parse_frames(raw):
                         encoding=encoding, obfuscated=bool(flags & 0x10),
                         substitute=substitute,
                         crc4_ok=crc4(head) == (flags & 0x0F),
-                        payload=payload, crc7=raw[p + size]))
+                        payload=payload, crc7=raw[p + size],
+                        raw=raw[i:p + size + 1]))     # the frame's own on-wire bytes
         i = p + size + 1
     return out
 
@@ -145,10 +146,8 @@ def parse_stream(buf):
             i = j + 1
             continue
         f = frames[0]
-        length = 3 + (2 if f["size"] > 127 else 1) + 1 + \
-            (1 if f["encoding"] == 3 else 0) + f["size"] + 1
         out.append(f)
-        i = j + length
+        i = j + len(f["raw"])
         if i >= len(buf):
             return out, i
 

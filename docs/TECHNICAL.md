@@ -208,12 +208,15 @@ why most of the 56-bit input field does not change.
 
 ## Outputs
 
-The outputs are documented, but not implemented. The board has 24 outputs across three connectors:
-eight lamp drivers at 12 V, eight more outputs, and eight data lines for the LED strips. Most strips
-are WS2812B at 5 V, from the board 5 V input rail. A few are 12 V parts. To drive any of them, you
-must send frames. This needs the outbound command format. This is the next task.
+The board has 24 outputs across three connectors: eight lamp drivers at 12 V, eight more outputs,
+and eight data lines for the LED strips. Most strips are WS2812B at 5 V, from the board 5 V input
+rail. A few are 12 V parts.
+
+The outbound frame format is reversed and driven. `bi2x/encoder.py` builds the frames, and the panel
+drives the LED strips and the button lamps. See [OUTPUTS.md](OUTPUTS.md) for the frame format, the
+strip map and the lamp map.
 
 ## Known gaps
 
-- The outbound frames are not implemented. So you cannot write to the board. See
-  [OUTPUTS-TODO.md](OUTPUTS-TODO.md) for the plan.
+- The frames the panel builds are valid, but not byte-identical to the vendor's, so driving the
+  hardware is not yet confirmed on the cabinet. See [OUTPUTS.md](OUTPUTS.md).

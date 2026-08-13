@@ -64,6 +64,7 @@ STRIP_LEDS = [74, 12, 12, 56, 56, 94, 38, 86]
 # and the state the outbound frames carry.
 led_state = [[(0, 0, 0)] * n for n in STRIP_LEDS]
 led_last_frames = []                # hex of the frames built by the last LED command
+last_poll_raw = None                # on-wire bytes of the last node-0x03 poll response
 outbound = deque()                  # frames waiting for the serial worker to send
 out_tag = 0                         # tag counter for the frames we build ourselves
 _sequence = 0
@@ -120,19 +121,108 @@ def pick_port(asked):
 
 def start_worker(port):
     """(Re)start the serial session on `port`, replacing any current one."""
-    global worker_thread
+    global worker_thread, last_poll_raw
     stop.set()
     if worker_thread and worker_thread.is_alive():
         worker_thread.join(timeout=2.0)
     stop.clear()
     with lock:
+        last_poll_raw = None
         state.update(connected=False, error=None, port=port, frames=0, crc_ok=0,
                      rate=0.0)
     worker_thread = threading.Thread(target=serial_loop, args=(port,), daemon=True)
     worker_thread.start()
 
 
+# Payload encoding modes, as the flags byte names them (bits 7:5).
+MODE_NAMES = {2: "plain", 3: "substitution", 4: "compressed"}
+
+
+def _is_poll(f):
+    """True for a node-0x03, 234-byte poll response."""
+    return f["node"] == 0x03 and f["size"] == 234
+
+
+def capture_poll_raw(frames):
+    """On-wire bytes of the newest poll response among `frames` (None if none).
+
+    `parse_frames` now carries each frame's own on-wire slice, so there is nothing
+    to locate or recompute here.
+    """
+    for f in reversed(frames):
+        if _is_poll(f):
+            return f["raw"]
+    return None
+
+
+def debug_layers(raw):
+    """The four teaching layers of one on-wire poll response, JSON-ready.
+
+    Pure function of the raw frame bytes; every field is computed through the
+    decoder, so what the page shows is exactly what the decoder sees.
+    """
+    frames = dec.parse_frames(raw)
+    if not frames:
+        return None
+    f = frames[0]
+    payload = f["payload"]
+    rs = dec.records(payload)
+    if not _is_poll(f) or not rs:
+        return None
+    record0 = rs[0]
+    a = dec.analog(record0)
+    # On-wire cut: AA | node | tag | size varint | flags | [substitute] | payload | crc7
+    nvar = 2 if f["size"] > 127 else 1              # size varint width (as in decoder)
+    cut = [("SOF", 1), ("node", 1), ("tag", 1), ("size", nvar), ("flags", 1)]
+    if f["encoding"] == 3:
+        cut.append(("substitute", 1))
+    cut += [("payload", f["size"]), ("crc7", 1)]
+    wire, pos = [], 0
+    for name, width in cut:
+        wire.append({"field": name, "hex": raw[pos:pos + width].hex()})
+        pos += width
+    return {
+        "wire": wire,
+        "node": f["node"], "tag": f["tag"], "size": f["size"],
+        "encoding": f["encoding"],
+        "mode": MODE_NAMES.get(f["encoding"], "unknown"),
+        "obfuscated": f["obfuscated"],
+        "crc4_ok": f["crc4_ok"],
+        "payload_hex": payload.hex(),
+        "prefix_hex": payload[:dec.PREFIX].hex(),
+        "block_header_hex": dec.block_header(payload).hex(),
+        "records": dec.NREC,
+        "digital_hex": record0[:7].hex(),
+        "analog_hex": record0[7:].hex(),
+        "pressed": dec.pressed(record0),
+        "volL": {"raw": a[dec.KNOB_L_CH],
+                 "graduation": dec.graduation(a[dec.KNOB_L_CH])},
+        "volR": {"raw": a[dec.KNOB_R_CH],
+                 "graduation": dec.graduation(a[dec.KNOB_R_CH])},
+        "system": dec.system_inputs(payload),
+    }
+
+
+def _median_analog(recs):
+    """VOL-L and VOL-R, median-filtered over the 5 newest records; the other two
+    (unused) channels pass through from the newest record.
+
+    About 0.5% of records carry a knob reading thousands of counts off the trend of
+    its window; the median of the five newest (about 2 ms apart) drops those without
+    adding real lag. Wrap-safe: the median is taken on the deltas from record 0, so a
+    reading near the 65535 -> 0 seam is not mistaken for a jump.
+    """
+    n = min(5, len(recs))
+    samples = [dec.analog(recs[i]) for i in range(n)]
+    out = list(samples[0])
+    for k in (dec.KNOB_L_CH, dec.KNOB_R_CH):
+        deltas = sorted(dec.knob_delta(samples[i][k], out[k]) for i in range(n))
+        out[k] = (out[k] + deltas[n // 2]) & 0xFFFF
+    return out
+
+
 def serial_loop(port):
+    global last_poll_raw
     try:
         replay = json.load(open(os.path.join(HERE, "replay.json")))
     except OSError:
@@ -192,11 +282,16 @@ def serial_loop(port):
                 sp.write(frame)
                 sp.flush()
             buffer += sp.read(sp.in_waiting or 1)
-            frames, consumed = dec.parse_stream(bytes(buffer))
+            data = bytes(buffer)
+            frames, consumed = dec.parse_stream(data)
             if consumed:
                 del buffer[:consumed]
+            raw_poll = capture_poll_raw(frames)
+            if raw_poll is not None:
+                with lock:
+                    last_poll_raw = raw_poll
             for f in frames:
-                if f["node"] != 0x03 or f["size"] != 234:
+                if not _is_poll(f):
                     continue
                 rs = dec.records(f["payload"])
                 if not rs:
@@ -204,7 +299,7 @@ def serial_loop(port):
                 n += 1
                 ok += f["crc4_ok"]
                 d = dec.digital(rs[0])
-                a = dec.analog(rs[0])
+                a = _median_analog(rs)      # median over the 5 newest, drops bad reads
                 if previous_analog is not None:
                     for k in (0, 1):
                         travel[k] += dec.knob_delta(a[k], previous_analog[k])
@@ -356,6 +451,13 @@ class Handler(BaseHTTPRequestHandler):
                           for s, n in enumerate(STRIP_LEDS)]
                 body = json.dumps({"strips": strips, "connected": state["connected"],
                                    "frames": led_last_frames}).encode()
+            return self._send(200, body, "application/json")
+        if route == "/debug":
+            with lock:
+                raw = last_poll_raw
+                connected = state["connected"]
+            layers = debug_layers(raw) if raw else None
+            body = json.dumps({"connected": connected, "layers": layers}).encode()
             return self._send(200, body, "application/json")
         if route == "/reset":
             with lock:

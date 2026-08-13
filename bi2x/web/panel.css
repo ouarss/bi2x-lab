@@ -5,6 +5,7 @@
 
 :root {
   --fond: #080b12;
+  --profond: #0b0f17;   /* recessed panels: code boxes, hex readouts, payload byte */
   --carte: #111722;
   --bord: #232c3d;
   --trait: #35435c;
@@ -56,6 +57,23 @@ body {
   margin: 0 0 1.5rem; padding: .75rem 1rem; border-radius: 8px;
   border: 1px solid var(--alerte); background: rgba(255, 95, 86, .1); color: var(--alerte);
 }
+
+/* ----------------------------------------------------------- onglets */
+
+.barre { margin-bottom: 0; border-bottom: 0; }
+.onglets {
+  display: flex; gap: .25rem; margin-bottom: 1.75rem;
+  border-bottom: 1px solid var(--bord);
+}
+.onglet {
+  background: none; border: 0; border-bottom: 2px solid transparent;
+  margin-bottom: -1px; padding: .55rem 1.15rem; cursor: pointer;
+  color: var(--attenue); font: inherit; font-size: .8rem;
+  font-weight: 700; letter-spacing: .12em; text-transform: uppercase;
+}
+.onglet:hover { color: var(--texte); }
+.onglet.actif { color: var(--cyan); border-bottom-color: var(--cyan); }
+.page[hidden] { display: none; }
 
 /* ----------------------------------------------------------- mise en page */
 
@@ -335,6 +353,85 @@ body {
   font: 12px/1.5 "Cascadia Code", ui-monospace, monospace;
 }
 
+/* ------------------------------------------------ debug, layer by layer */
+
+.debug-colonnes {
+  display: grid; grid-template-columns: 380px minmax(0, 1fr);
+  gap: 1.75rem; align-items: start; max-width: 1400px; margin: 0 auto;
+}
+@media (max-width: 1080px) { .debug-colonnes { grid-template-columns: 1fr; } }
+
+.debug-vide { margin: .5rem 0 0; color: var(--attenue); font-size: .85rem; font-style: italic; }
+.couches.fige { border-color: var(--ambre); }
+
+.couche { border-top: 1px solid rgba(35, 44, 61, .6); padding: .9rem 0 .95rem; }
+.couche:last-child { padding-bottom: 0; }
+.couche h3 {
+  margin: 0 0 .15rem; font-size: .76rem; letter-spacing: .1em;
+  text-transform: uppercase; font-weight: 700; color: var(--texte);
+}
+.couche h3 .niveau { color: var(--cyan); margin-right: .45rem; }
+.legende { margin: 0 0 .55rem; color: var(--attenue); font-size: .76rem; }
+.legende b { color: var(--texte); }
+
+.hex {
+  display: block; padding: .5rem .6rem; margin-bottom: .45rem;
+  border: 1px solid var(--bord); border-radius: 6px; background: var(--profond);
+  color: var(--attenue); word-break: break-all; white-space: pre-wrap;
+  font: 12px/1.85 "Cascadia Code", ui-monospace, monospace;
+}
+.hex:last-child { margin-bottom: 0; }
+
+/* One labelled field of a hex dump: coloured bytes, tiny name after them. */
+.champ { border-bottom: 2px solid var(--trait); padding: 0 .1rem; margin-right: .4rem; }
+.champ::after {
+  content: attr(data-nom); margin-left: .3rem; vertical-align: super;
+  font-size: .6rem; letter-spacing: .05em; color: var(--attenue);
+}
+/* Field colours, grouped by hue: each field's byte text and underline share the
+   colour of its box in the diagrams. All field classes are defined here. */
+.champ-sof, .champ-flags, .champ-header, .champ-strip, .champ-master {
+  color: var(--ambre); border-color: var(--ambre);
+}
+.champ-node, .champ-digital, .champ-plain, .champ-cmd, .champ-lampe {
+  color: var(--cyan); border-color: var(--cyan);
+}
+.champ-tag, .champ-substitute, .champ-analog, .champ-scrambled, .champ-count {
+  color: var(--magenta); border-color: var(--magenta);
+}
+.champ-size, .champ-offset, .champ-poll {
+  color: var(--texte); border-color: var(--texte);
+}
+.champ-crc7, .champ-pixel { color: var(--alerte); border-color: var(--alerte); }
+.champ-echoes, .champ-reserve, .champ-zeros {
+  color: var(--attenue); border-color: var(--trait);
+}
+.champ-payload { border-color: transparent; }
+
+.champs-trame {
+  display: flex; flex-wrap: wrap; gap: .35rem 1.5rem; margin: 0 0 .55rem;
+  font-size: .8rem; font-variant-numeric: tabular-nums;
+}
+.champs-trame div { display: flex; gap: .45rem; }
+.champs-trame dt { margin: 0; color: var(--attenue); }
+.champs-trame dd { margin: 0; font-weight: 600; }
+
+.sens { display: flex; flex-wrap: wrap; gap: 1rem 2.5rem; align-items: flex-start; }
+.sens-groupe h4 {
+  margin: 0 0 .4rem; font-size: .7rem; letter-spacing: .1em;
+  text-transform: uppercase; color: var(--attenue); font-weight: 700;
+}
+.sens .tableau.serre { width: auto; }
+.sens .tableau.serre td { padding-right: .9rem; }
+.sens .tableau.serre tr:first-child td { border-top: 0; }
+
+.puces { display: flex; flex-wrap: wrap; gap: .35rem; }
+.puce {
+  border: 1px solid var(--bord); border-radius: 5px; padding: .12rem .5rem;
+  color: var(--attenue); font-size: .74rem; letter-spacing: .08em;
+}
+.puce.actif { color: var(--cyan); border-color: var(--cyan); background: var(--cyan-doux); }
+
 /* LED bench promoted to a full-width band under the two columns. */
 .pleine-largeur { margin-top: 1.25rem; }
 .pleine-largeur .led-nom { flex-basis: 6rem; }
@@ -358,3 +455,137 @@ body {
 /* Dots are a preview now, not clickable. */
 .led-point { cursor: default; }
 .led-point:hover { transform: none; border-color: var(--bord); }
+
+/* ------------------------------------------------ how it works (static) */
+
+.howto { max-width: 900px; margin: 0 auto; }
+.howto .aide { margin: 0 0 1.1rem; }
+.defs-fleches { position: absolute; }
+
+.etape { padding: .35rem 0; }
+.etape h3 {
+  display: flex; align-items: center; gap: .55rem; margin: 0 0 .35rem;
+  font-size: .78rem; letter-spacing: .1em; text-transform: uppercase;
+  font-weight: 700; color: var(--texte);
+}
+.numero {
+  flex: none; width: 26px; height: 26px; border-radius: 50%;
+  border: 1px solid var(--cyan); color: var(--cyan);
+  display: inline-flex; align-items: center; justify-content: center;
+  font-size: .8rem; letter-spacing: 0;
+}
+.etape .legende { margin: 0 0 .6rem; }
+/* Keyword highlights inside the step text, matching the diagram field colours. */
+.mot-payload { color: var(--texte); font-weight: 600; }
+.mot-tag { color: var(--magenta); font-weight: 600; }
+/* Section direction badge: which way the bytes travel. */
+.direction {
+  display: inline-flex; align-items: center; gap: .4rem;
+  padding: .22rem .7rem; border-radius: 999px;
+  border: 1px solid var(--cyan); color: var(--cyan);
+  font-size: .82rem; font-weight: 600; letter-spacing: .05em;
+}
+.direction.sortie { border-color: var(--ambre); color: var(--ambre); }
+.etape .legende code {
+  font-family: "Cascadia Code", ui-monospace, monospace; font-size: .95em;
+  color: var(--texte);
+}
+
+/* Discreet per-step "code" button, and the shared snippet modal. */
+.btn-code {
+  margin-left: auto; padding: .12rem .55rem; cursor: pointer;
+  background: none; border: 1px solid var(--bord); border-radius: 5px;
+  color: var(--attenue); font: inherit; font-size: .66rem;
+  font-weight: 700; letter-spacing: .12em; text-transform: uppercase;
+}
+.btn-code:hover { color: var(--cyan); border-color: var(--cyan); }
+
+.voile-code {
+  position: fixed; inset: 0; z-index: 50;
+  display: flex; align-items: center; justify-content: center;
+  background: rgba(8, 11, 18, .72); padding: 1.5rem;
+}
+.voile-code[hidden] { display: none; }
+.modal-code {
+  width: min(680px, 100%); max-height: 80vh; overflow: auto;
+  background: var(--carte); border: 1px solid var(--bord); border-radius: 12px;
+  padding: 1rem 1.1rem 1.1rem; box-shadow: 0 18px 50px rgba(0, 0, 0, .55);
+}
+.modal-code-barre { display: flex; align-items: center; gap: 1rem; margin-bottom: .7rem; }
+.modal-code-barre h3 {
+  margin: 0; font-size: .74rem; letter-spacing: .14em;
+  text-transform: uppercase; font-weight: 700; color: var(--cyan);
+}
+.fermer-code {
+  margin-left: auto; background: none; border: 0; cursor: pointer;
+  color: var(--attenue); font-size: 1.15rem; line-height: 1; padding: 0 .2rem;
+}
+.fermer-code:hover { color: var(--texte); }
+.code-python {
+  margin: 0; padding: .6rem .7rem; overflow-x: auto;
+  border: 1px solid var(--bord); border-radius: 6px; background: var(--profond);
+}
+.code-python code {
+  font: 12px/1.6 "Cascadia Code", ui-monospace, monospace;
+  color: var(--texte); white-space: pre;
+}
+
+/* Vertical arrow between two steps: step N explains the output of step N-1. */
+.fleche-etape {
+  position: relative; width: 2px; height: 26px;
+  margin: .15rem 0 .15rem 12px; background: var(--trait);
+}
+.fleche-etape::after {
+  content: ""; position: absolute; left: -4px; bottom: -4px;
+  border: 5px solid transparent; border-top: 6px solid var(--trait);
+}
+
+/* Frozen byte examples: label above, labelled coloured fields inside. */
+.exemple { margin-top: .2rem; }
+.exemple + .exemple { margin-top: .6rem; }
+.exemple .etiquette-trame {
+  display: block; margin-bottom: .3rem;
+  color: var(--attenue); font-size: .75rem; letter-spacing: .04em;
+}
+.hexnote { margin: -.15rem 0 .45rem; color: var(--attenue); font-size: .76rem; }
+
+.encadre-wrap {
+  margin: .7rem 0 0; padding: .55rem .75rem;
+  border: 1px solid var(--ambre); border-radius: 8px;
+  background: var(--ambre-doux); color: var(--texte); font-size: .8rem;
+}
+.encadre-wrap b { color: var(--ambre); }
+
+/* Inline diagrams: boxes, byte bands, pipeline arrows, all on the palette. */
+.schema {
+  display: block; width: 100%; height: auto;
+  margin: .15rem 0 .6rem;
+}
+.schema text { font: 12px "Segoe UI", system-ui, sans-serif; fill: var(--texte); }
+.schema .mono { font-family: "Cascadia Code", ui-monospace, monospace; }
+.schema .petit { font-size: 10px; fill: var(--attenue); }
+.schema .cmd { fill: var(--cyan); font-weight: 600; }
+.schema .boite { fill: #10161f; stroke: var(--trait); stroke-width: 1.5; }
+.schema .boite-douce { fill: var(--carte); stroke: var(--bord); }
+.schema .fil { stroke: var(--attenue); stroke-width: 1.5; fill: none; }
+.schema .fil-cyan { stroke: var(--cyan); }
+.schema .pointille { stroke-dasharray: 4 3; fill: none; stroke: var(--attenue); }
+.pointe-grise { fill: var(--attenue); }
+.pointe-cyan { fill: var(--cyan); }
+
+/* Byte-band segments reuse the field colours of the hex dumps. */
+.schema .seg { stroke-width: 1.2; }
+.schema .seg-sof { fill: var(--ambre-doux); stroke: var(--ambre); }
+.schema .seg-node { fill: var(--cyan-doux); stroke: var(--cyan); }
+.schema .seg-tag { fill: var(--magenta-doux); stroke: var(--magenta); }
+.schema .seg-size { fill: rgba(232, 237, 246, .08); stroke: var(--attenue); }
+.schema .seg-flags { fill: var(--ambre-doux); stroke: var(--ambre); }
+.schema .seg-payload { fill: var(--profond); stroke: var(--trait); }
+.schema .seg-crc { fill: rgba(255, 95, 86, .15); stroke: var(--alerte); }
+
+.schema .grille { stroke: var(--trait); fill: none; }
+.schema .cellules-connues { fill: var(--cyan-doux); }
+.schema .cadran-svg { fill: #10161f; stroke: var(--trait); stroke-width: 2; }
+.schema .aiguille-svg { stroke: var(--cyan); stroke-width: 2.5; stroke-linecap: round; }
+.schema .lampe-svg { fill: var(--ambre-doux); stroke: var(--ambre); stroke-width: 1.5; }
+.schema .rayon { stroke: var(--ambre); stroke-width: 1.5; stroke-linecap: round; }
