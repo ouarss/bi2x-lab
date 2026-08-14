@@ -213,8 +213,12 @@ and eight data lines for the LED strips. Most strips are WS2812B at 5 V, from th
 rail. A few are 12 V parts.
 
 The outbound frame format is reversed and driven. `bi2x/encoder.py` builds the frames, and the panel
-drives the LED strips and the button lamps. See [OUTPUTS.md](OUTPUTS.md) for the frame format, the
-strip map and the lamp map.
+drives the LED strips, the button lamps and the card reader LED, and can replay the cabinet's own
+lighting patterns (`bi2x/patterns.py`). See [OUTPUTS.md](OUTPUTS.md) for the frame format, the strip
+map, the lamp map and the latch the strips need.
+
+Not every output goes out the same way. The strips take frames of their own plus a latch; the lamps
+and the reader are bytes of the poll frame's output field, so they need no frame at all.
 
 ## Known gaps
 

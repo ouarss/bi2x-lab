@@ -238,6 +238,70 @@ const buildLamps = () => {
     postLamp('/lamp/all', { on: false }))
 }
 
+// ------------------------------------------------------- cabinet patterns
+
+// The patterns come from the server, so the list is whatever it knows how to
+// play. "Custom" is the absence of a pattern: the strips stay as they are and
+// the bench below takes over.
+let currentPattern = null
+
+const renderPatterns = (patterns, active, reader) => {
+  const host = document.getElementById('motifs')
+  if (!host) return
+  if (patterns && !host.dataset.built) {
+    host.innerHTML =
+      patterns.map((p) =>
+        `<button type="button" class="lien motif" data-motif="${p.name}"
+                 title="${p.strips}">${p.label}</button>`).join('') +
+      '<button type="button" class="lien motif" data-motif="">Custom</button>'
+    host.dataset.built = '1'
+  }
+  currentPattern = active ?? null
+  host.querySelectorAll('.motif').forEach((b) => {
+    b.classList.toggle('actif', (b.dataset.motif || null) === currentPattern)
+  })
+  const etat = document.getElementById('motif-etat')
+  if (etat) {
+    const lit = reader && reader.some((c) => c > 0)
+    etat.textContent = currentPattern
+      ? `playing ${currentPattern}${lit ? `, reader ${reader.join(', ')}` : ''}`
+      : 'custom'
+  }
+  document.getElementById('banc-led')?.classList.toggle('inactif', Boolean(currentPattern))
+}
+
+const postPattern = async (name) => {
+  try {
+    await fetch(`${API}/led/pattern`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        name: name || null,
+        brightness: Number(document.getElementById('led-intensite').value),
+      }),
+    })
+  } catch { /* ignore */ }
+  refreshLed()
+}
+
+// While a pattern plays the strips change on their own, so the view has to
+// follow. Only while its tab is open, and ten times a second, which is enough
+// to read: the frames themselves go out at sixty.
+const PATTERN_VIEW_PERIOD = 100
+const patternViewLoop = async () => {
+  if (activeTab === 'leds' && currentPattern) await refreshLed()
+  setTimeout(patternViewLoop, PATTERN_VIEW_PERIOD)
+}
+
+const buildPatterns = () => {
+  const host = document.getElementById('motifs')
+  host.addEventListener('click', (e) => {
+    const bouton = e.target.closest('.motif')
+    if (bouton) postPattern(bouton.dataset.motif)
+  })
+  patternViewLoop()
+}
+
 // ----------------------------------------------------------- LED test bench
 
 // The eight addressable outputs and their LED counts (from the board's own frames).
@@ -254,7 +318,8 @@ const showFrames = (frames) => {
 // Repaint the dots from the server's LED state, so the view matches what was sent.
 const refreshLed = async () => {
   try {
-    const { strips, frames } = await (await fetch(`${API}/led/state`, { cache: 'no-store' })).json()
+    const { strips, frames, pattern, patterns, reader } =
+      await (await fetch(`${API}/led/state`, { cache: 'no-store' })).json()
     strips.forEach((strip, s) => {
       const row = document.querySelector(`.led-rangee[data-strip="${s}"]`)
       if (!row) return
@@ -263,6 +328,8 @@ const refreshLed = async () => {
       })
     })
     showFrames(frames)
+    showReader(reader)
+    renderPatterns(patterns, pattern, reader)
   } catch { /* server not up yet */ }
 }
 
@@ -276,6 +343,55 @@ const postLed = async (route, body) => {
     showFrames((await r.json()).frames)
   } catch { /* ignore */ }
   refreshLed()
+}
+
+// The reader LED takes 8-bit levels, so its dot is painted straight from the
+// bytes the server holds, without the strips' 5-bit round trip.
+const showReader = (reader) => {
+  const dot = document.getElementById('lecteur-point')
+  if (dot && reader) dot.style.background = `rgb(${reader[0]},${reader[1]},${reader[2]})`
+}
+
+const readerBrush = () => ({
+  colour: document.getElementById('lecteur-couleur').value,
+  brightness: Number(document.getElementById('lecteur-intensite').value),
+})
+
+const buildReader = () => {
+  const slider = document.getElementById('lecteur-intensite')
+  const label = document.getElementById('lecteur-intensite-val')
+  const couleur = document.getElementById('lecteur-couleur')
+  const send = () => envoiThrottle('reader', () => postLed('/led/reader', readerBrush()))
+  slider.addEventListener('input', () => {
+    label.textContent = `${slider.value}%`
+    send()
+  })
+  slider.addEventListener('change', send)
+  couleur.addEventListener('input', send)
+  couleur.addEventListener('change', send)
+  document.getElementById('lecteur-eteindre').addEventListener('click', () =>
+    postLed('/led/reader', { colour: '#000000', brightness: 0 }))
+}
+
+// An <input type=color> fires `input` while the picker is open and `change` when
+// it closes, but the native Windows picker can close without the page ever seeing
+// a `change`: the colour was then only applied on the next slider move. So follow
+// `input` too, throttled per control, with the last value always sent.
+const SEND_THROTTLE = 120
+const enAttente = new Map()
+
+const envoiThrottle = (cle, fn) => {
+  if (enAttente.has(cle)) {           // a send already went out in this window
+    enAttente.set(cle, fn)            // keep the newest, it goes out at the end
+    return
+  }
+  fn()
+  enAttente.set(cle, null)
+  setTimeout(() => {
+    const dernier = enAttente.get(cle)
+    enAttente.delete(cle)
+    if (dernier) dernier()
+  }, SEND_THROTTLE)
 }
 
 const globalBrush = () => ({
@@ -301,15 +417,24 @@ const buildLedBench = () => {
       `<span class="led-point" title="strip ${s}, LED ${i}"></span>`).join('') +
     '</div></div>').join('')
 
-  // Live intensity read-out, and apply a whole strip when its colour or slider changes.
+  // Live intensity read-out, and apply a whole strip as its colour or slider moves.
+  const appliquerBanc = (cible) => {
+    const banc = cible.closest('.led-banc')
+    if (!banc) return
+    const strip = Number(banc.dataset.strip)
+    envoiThrottle(`strip${strip}`, () =>
+      postLed('/led/strip', { strip, ...stripBrush(banc) }))
+  }
   host.addEventListener('input', (e) => {
-    if (!e.target.classList.contains('led-int')) return
-    e.target.closest('.led-banc').querySelector('.led-int-val').textContent = `${e.target.value}%`
+    if (!e.target.classList.contains('led-col') && !e.target.classList.contains('led-int')) return
+    if (e.target.classList.contains('led-int')) {
+      e.target.closest('.led-banc').querySelector('.led-int-val').textContent = `${e.target.value}%`
+    }
+    appliquerBanc(e.target)
   })
   host.addEventListener('change', (e) => {
     if (!e.target.classList.contains('led-col') && !e.target.classList.contains('led-int')) return
-    const banc = e.target.closest('.led-banc')
-    postLed('/led/strip', { strip: Number(banc.dataset.strip), ...stripBrush(banc) })
+    appliquerBanc(e.target)
   })
 
   // Global: apply the top colour to every strip, mirroring it onto each strip's controls.
@@ -357,9 +482,12 @@ const buildTabs = () => {
 // ----------------------------------------------------- debug, layer by layer
 
 // The poll answer decoded level by level by the server (/debug). Refreshed a few
-// times per second only: this view is for reading, not for reacting.
+// times per second only: this view is for reading, not for reacting. It starts
+// stopped, and only ever runs while its own tab is open, so it costs nothing
+// until asked for. Nothing extra reaches the board: /debug returns the poll
+// answer the worker has already decoded.
 const DEBUG_PERIOD = 300
-let debugPaused = false
+let debugPaused = true
 
 const fieldSpan = (nom, hexa) =>
   `<span class="champ champ-${nom.toLowerCase()}" data-nom="${nom}">${spaced(hexa.toUpperCase())}</span>`
@@ -432,9 +560,10 @@ const debugLoop = async () => {
 
 const buildDebug = () => {
   const bouton = document.getElementById('pause-debug')
+  document.querySelector('.couches').classList.add('fige')
   bouton.addEventListener('click', () => {
     debugPaused = !debugPaused
-    bouton.textContent = debugPaused ? 'resume' : 'pause'
+    bouton.textContent = debugPaused ? 'start' : 'stop'
     document.querySelector('.couches').classList.toggle('fige', debugPaused)
   })
 }
@@ -490,7 +619,13 @@ def knob_delta(new, old):                         # wrapped difference
     return bytes([w & 0xFF, w >> 8])   # little-endian
 payload = (b"\\x03\\x21" + bytes([strip, 0])         # SetTapeLedData
            + offset.to_bytes(2, "little")
-           + bytes([count]) + pixels)`,
+           + bytes([count]) + pixels)
+
+field = bytearray(44)                  # SetOutputs, inside the poll frame
+field[0] = 0xFF                        # master
+field[17:24] = lamps                   # START, BT-A..D, FX-L, FX-R
+field[25:28] = reader_rgb              # card reader LED, 8 bits per channel
+poll = b"\\x03\\x11" + bytes(field) + b"\\x03\\x10"`,
 
   'Pack':
 `wire = compress(payload)   # sliding-window pack (85-byte window);
@@ -507,8 +642,14 @@ head = bytes([node, tag]) + size + bytes([flags & 0xF0])
 flags |= crc4(head)                           # 4-bit header sum in the low nibble
 frame = bytes([0xAA, node, tag]) + size + bytes([flags]) + wire`,
 
-  'Send':
-`sp.write(frame)   # the board unpacks it and lights the LED or the lamp`,
+  'Send, then latch':
+`for payload in pixel_frames:          # fills the board's buffer, shows nothing
+    sp.write(encode_frame(tag, payload))
+    tag = (tag + 1) & 0xFF
+
+latch = b"\\x03\\x22" if pixel_frames else b""
+sp.write(encode_frame(tag, b"\\x03\\x11" + field + latch + b"\\x03\\x10"))
+tag = (tag + 1) & 0xFF                # one counter for every frame that goes out`,
 }
 
 const openCode = (titre) => {
@@ -614,6 +755,8 @@ buildCode()
 buildLamps()
 refreshLamps()
 buildLedBench()
+buildReader()
+buildPatterns()
 refreshLed()
 loadPorts()
 setInterval(loadPorts, 5000)

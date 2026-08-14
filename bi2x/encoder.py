@@ -23,7 +23,17 @@ The LED command is SetTapeLedData:
     03 21 | strip | 00 | offset(2 LE) | count | count*2 bytes of pixels
 
 Each pixel is a 15-bit 5-5-5 RGB colour, little-endian 16-bit, bit 15 = 0.
+Writing pixels only fills the board's buffer. What puts them on the strips is a
+separate 2-byte command, SetTapeLedLatch:
+
+    03 22
+
+It travels in the poll frame that follows the burst, right before the 03 10 that
+asks for the inputs: `03 11 | outputs | 03 22 | 03 10`. Without it the strips
+never change, however many pixel commands are sent.
 """
+import functools
+
 LCG_A, LCG_C = 0x41C64E6D, 0x3039
 TX_SEED_XOR = 0x55
 WINDOW, WP_INIT = 85, 81
@@ -47,8 +57,15 @@ def crc4(data):
     return _crc(TBL4, 0x0F, data, 0x0F) ^ 0x0F
 
 
+@functools.lru_cache(maxsize=256)
 def crc7(data):
-    """Payload checksum, computed on the plaintext."""
+    """Payload checksum, computed on the plaintext.
+
+    Memoised, like `compress`: a poll frame is rebuilt on every cycle with the
+    same payload and only the tag changing, and both of these depend on the
+    payload alone. Pure functions of an immutable argument, so the cache is only
+    a speed-up.
+    """
     return _crc(TBL7, 0x7F, data, 0x7F) ^ 0x7F
 
 
@@ -111,6 +128,7 @@ def decompress(src):
     return bytes(out)
 
 
+@functools.lru_cache(maxsize=256)
 def compress(data):
     """Greedy mode-4 deflate that always inflates back to `data`. Falls back to a
     literal-only stream if the greedy pass ever fails its own check."""
@@ -208,6 +226,7 @@ def _write_varint(value):
 
 def encode_frame(tag, payload, node=0x02, mode=4):
     """Build a complete, board-acceptable frame from a plaintext payload."""
+    payload = bytes(payload)                # hashable, for the memoised helpers
     if mode == 4:
         wire = compress(payload)
     elif mode == 2:
@@ -247,5 +266,42 @@ def tape_led_payload(strip, pixels, offset=0):
 
 
 def tape_led_frame(tag, strip, pixels, offset=0):
-    """A ready-to-send frame that sets `pixels` on `strip` from `offset`."""
+    """A ready-to-send frame that sets `pixels` on `strip` from `offset`.
+
+    On its own this frame changes nothing on the strips: it fills the board's
+    buffer and waits for the latch. See `TAPE_LED_LATCH`.
+    """
     return encode_frame(tag, tape_led_payload(strip, pixels, offset))
+
+
+# SetTapeLedLatch: pushes the buffer onto the strips. Rides in the poll frame,
+# just before the 03 10 that asks for the inputs.
+TAPE_LED_LATCH = b"\x03\x22"
+
+# Largest payload seen on the wire, and the pixel count that fits in one.
+MAX_PAYLOAD = 263
+MAX_PIXELS = (MAX_PAYLOAD - 7) // 2
+
+
+def tape_led_payloads(commands):
+    """Pack SetTapeLedData commands into payloads of at most MAX_PAYLOAD bytes.
+
+    Several commands travel in one frame, which is what the board sees from the
+    game: a burst of two or three frames carrying every strip that changed, then
+    the latch.
+    """
+    out, current = [], bytearray()
+    for cmd in commands:
+        if current and len(current) + len(cmd) > MAX_PAYLOAD:
+            out.append(bytes(current))
+            current = bytearray()
+        current += cmd
+    if current:
+        out.append(bytes(current))
+    return out
+
+
+def split_pixels(strip, pixels, offset=0):
+    """One strip as a list of SetTapeLedData commands, each short enough to send."""
+    return [tape_led_payload(strip, pixels[i:i + MAX_PIXELS], offset + i)
+            for i in range(0, len(pixels), MAX_PIXELS)]

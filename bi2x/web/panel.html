@@ -149,7 +149,9 @@
       <ul class="sorties lampes" id="lamps"></ul>
       <p class="aide">The lamps are plain 12 V LEDs: on or off. Their state travels
          in the poll frame (SetOutputs): after the first change the server builds
-         every poll frame itself. The frame below is the poll built for tag 00.</p>
+         every poll frame itself. The card reader LED shares that same field, three
+         bytes further along, and is driven from the LEDs tab. The frame below is
+         the poll built for tag 00.</p>
       <div class="led-trame">
         <span class="etiquette-trame">poll frame (tag 00)</span>
         <code id="lamp-trame-hex">-</code>
@@ -169,6 +171,18 @@
 </div>
 
 <div class="page" id="page-leds" hidden>
+<section class="bloc pleine-largeur" id="banc-motifs">
+  <div class="bloc-titre">
+    <h2>Cabinet patterns</h2>
+    <span class="note" id="motif-etat">custom</span>
+  </div>
+  <p class="aide">The lighting the cabinet plays, rebuilt frame by frame and sent at
+     60 per second. Only the strips that changed go out, so a still pattern costs
+     almost nothing. Card entry also drives the card reader LED, which the manual
+     bench cannot reach. Custom stops the pattern and hands the strips back to you.</p>
+  <div class="motifs" id="motifs"></div>
+</section>
+
 <section class="bloc pleine-largeur" id="banc-led">
   <div class="bloc-titre">
     <h2>LED test bench</h2>
@@ -187,6 +201,20 @@
      colour to all. When the board is connected the matching SetTapeLedData frame is
      sent; either way the built frame is shown below.</p>
   <div class="led-bancs" id="led-bancs"></div>
+
+  <div class="led-lecteur">
+    <span class="led-nom">card reader <i>1 RGB LED</i></span>
+    <label class="pinceau"><input type="color" id="lecteur-couleur" value="#ff0000"></label>
+    <label class="pinceau intensite">
+      <input type="range" id="lecteur-intensite" min="0" max="100" value="100">
+      <b id="lecteur-intensite-val">100%</b></label>
+    <button type="button" class="lien" id="lecteur-eteindre">off</button>
+    <span class="led-point grand" id="lecteur-point"></span>
+  </div>
+  <p class="aide">The reader LED is not a strip: it is three bytes of the output field, red,
+     green and blue, so it travels in the poll frame like the button lamps. Full 8-bit
+     levels, unlike the 5 bits a strip pixel carries.</p>
+
   <div class="led-trame">
     <span class="etiquette-trame">frame sent</span>
     <code id="led-trame-hex">-</code>
@@ -217,12 +245,15 @@
   <section class="bloc couches">
     <div class="bloc-titre">
       <h2>Last poll answer, layer by layer</h2>
-      <button type="button" class="lien" id="pause-debug">pause</button>
+      <button type="button" class="lien" id="pause-debug">start</button>
     </div>
     <p class="aide">Each layer explains the layer above it: from the bytes on the
-       wire down to what they mean. Press pause to freeze the view and read it.</p>
+       wire down to what they mean. This view starts stopped: press start to read
+       the newest poll answer three times a second, stop to freeze it. It reads
+       the answer the worker has already decoded, so it asks nothing more of the
+       board either way.</p>
 
-    <p class="debug-vide" id="debug-vide">waiting for a poll answer…</p>
+    <p class="debug-vide" id="debug-vide">stopped, press start</p>
 
     <div id="debug-corps" hidden>
 
@@ -471,26 +502,37 @@
     <h2>Driving the outputs</h2>
     <span class="direction sortie">host &#8594; board</span>
   </div>
-  <p class="aide">One command paints the LED strips, one command sets the button
-     lamps. Both travel the same road: pack, scramble, frame, send.</p>
+  <p class="aide">Three commands cover every output. They all travel the same road:
+     pack, scramble, frame, send. The one catch is that pixels do not appear until
+     they are latched.</p>
 
   <article class="etape">
     <h3><span class="numero">1</span>Choose the command<button type="button" class="btn-code" data-etape="Choose the command">code</button></h3>
-    <p class="legende"><code>03 21</code> (SetTapeLedData) paints a LED strip;
-       one pixel is a 15-bit 5-5-5 RGB colour. <code>03 11</code> (SetOutputs)
-       sets the button lamps, which ride inside the poll frame.</p>
-    <svg class="schema" viewBox="0 0 660 120" role="img"
-         aria-label="Two commands: SetTapeLedData paints LED strips, SetOutputs sets the lamps">
-      <rect class="boite" x="20" y="16" width="300" height="88" rx="8"/>
-      <text class="mono cmd" x="40" y="44">03 21</text>
-      <text x="100" y="44">SetTapeLedData</text>
-      <text class="petit" x="40" y="68">paints one LED strip</text>
-      <text class="petit" x="40" y="86">1 pixel = 15-bit 5-5-5 RGB colour</text>
-      <rect class="boite" x="344" y="16" width="296" height="88" rx="8"/>
-      <text class="mono cmd" x="364" y="44">03 11</text>
-      <text x="424" y="44">SetOutputs</text>
-      <text class="petit" x="364" y="68">sets the 7 button lamps</text>
-      <text class="petit" x="364" y="86">rides inside the poll frame</text>
+    <p class="legende"><code>03 21</code> (SetTapeLedData) writes pixels into a buffer
+       on the board; one pixel is a 15-bit 5-5-5 RGB colour.
+       <br><code>03 22</code> (SetTapeLedLatch) is what puts that buffer on the strips.
+       <br><code>03 11</code> (SetOutputs) sets the 7 button lamps and the card reader
+       LED, and rides inside the poll frame.</p>
+    <svg class="schema" viewBox="0 0 660 128" role="img"
+         aria-label="Three commands: SetTapeLedData writes pixels, SetTapeLedLatch shows them, SetOutputs sets the lamps and the reader">
+      <rect class="boite" x="12" y="16" width="212" height="96" rx="8"/>
+      <text class="mono cmd" x="30" y="44">03 21</text>
+      <text class="petit" x="92" y="44">SetTapeLedData</text>
+      <text class="petit" x="30" y="70">writes pixels to a buffer</text>
+      <text class="petit" x="30" y="90">1 pixel = 5-5-5 RGB</text>
+      <text class="petit" x="30" y="106">nothing shows yet</text>
+      <rect class="boite" x="232" y="16" width="180" height="96" rx="8"/>
+      <text class="mono cmd" x="250" y="44">03 22</text>
+      <text class="petit" x="312" y="44">SetTapeLedLatch</text>
+      <text class="petit" x="250" y="70">shows the buffer</text>
+      <text class="petit" x="250" y="90">2 bytes, no argument</text>
+      <text class="petit" x="250" y="106">rides in the poll frame</text>
+      <rect class="boite" x="420" y="16" width="228" height="96" rx="8"/>
+      <text class="mono cmd" x="438" y="44">03 11</text>
+      <text class="petit" x="500" y="44">SetOutputs</text>
+      <text class="petit" x="438" y="70">7 button lamps</text>
+      <text class="petit" x="438" y="90">card reader LED, RGB</text>
+      <text class="petit" x="438" y="106">rides in the poll frame</text>
     </svg>
     <div class="exemple">
       <span class="etiquette-trame">LED command, plain payload</span>
@@ -498,7 +540,11 @@
     </div>
     <div class="exemple">
       <span class="etiquette-trame">lamp command, plain payload, 48 bytes</span>
-      <code class="hex"><span class="champ champ-cmd" data-nom="SetOutputs">03 11</span><span class="champ champ-master" data-nom="byte 0, master">FF</span><span class="champ champ-zeros" data-nom="bytes 1..16">00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00</span><span class="champ champ-lampe" data-nom="byte 17, START lamp">FF</span><span class="champ champ-zeros" data-nom="bytes 18..43, other lamps off">00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00</span><span class="champ champ-poll" data-nom="Poll">03 10</span></code>
+      <code class="hex"><span class="champ champ-cmd" data-nom="SetOutputs">03 11</span><span class="champ champ-master" data-nom="byte 0, master">FF</span><span class="champ champ-zeros" data-nom="bytes 1..16">00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00</span><span class="champ champ-lampe" data-nom="byte 17, START lamp">FF</span><span class="champ champ-zeros" data-nom="bytes 18..24, other lamps off">00 00 00 00 00 00 00</span><span class="champ champ-lecteur" data-nom="bytes 25..27, card reader red, green, blue">FF 00 00</span><span class="champ champ-zeros" data-nom="bytes 28..43">00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00</span><span class="champ champ-poll" data-nom="Poll">03 10</span></code>
+    </div>
+    <div class="exemple">
+      <span class="etiquette-trame">the same, on the cycle that shows the pixels</span>
+      <code class="hex"><span class="champ champ-cmd" data-nom="SetOutputs">03 11</span><span class="champ champ-zeros" data-nom="the 44-byte output field">…</span><span class="champ champ-latch" data-nom="SetTapeLedLatch">03 22</span><span class="champ champ-poll" data-nom="Poll">03 10</span></code>
     </div>
   </article>
 
@@ -590,24 +636,38 @@
   <div class="fleche-etape" aria-hidden="true"></div>
 
   <article class="etape">
-    <h3><span class="numero">5</span>Send<button type="button" class="btn-code" data-etape="Send">code</button></h3>
-    <p class="legende">The board unpacks the frame and lights the LED or the
-       lamp.</p>
-    <svg class="schema" viewBox="0 0 660 120" role="img"
-         aria-label="The host sends the frame, the board lights the LED or lamp">
-      <rect class="boite" x="30" y="32" width="130" height="56" rx="8"/>
-      <text x="95" y="66" text-anchor="middle">HOST</text>
-      <line class="fil" x1="160" y1="60" x2="294" y2="60" marker-end="url(#fl-gris)"/>
-      <text class="petit" x="228" y="50" text-anchor="middle">frame</text>
-      <rect class="boite" x="300" y="32" width="130" height="56" rx="8"/>
-      <text x="365" y="66" text-anchor="middle">BOARD</text>
-      <line class="fil" x1="430" y1="60" x2="512" y2="60" marker-end="url(#fl-gris)"/>
-      <text class="petit" x="471" y="50" text-anchor="middle">unpack</text>
-      <circle class="lampe-svg" cx="560" cy="60" r="20"/>
-      <path class="rayon" d="M584 36 L592 28 M584 84 L592 92 M536 36 L528 28 M536 84 L528 92 M560 32 L560 22 M560 88 L560 98"/>
-      <text class="petit" x="560" y="114" text-anchor="middle">light</text>
+    <h3><span class="numero">5</span>Send, then latch<button type="button" class="btn-code" data-etape="Send, then latch">code</button></h3>
+    <p class="legende">Pixel frames go out first, several commands to a frame, and
+       nothing changes on the cabinet yet. The poll that follows carries the latch,
+       and that is the frame that lights the strips. Miss it and the strips never
+       change, however many pixels were sent. The lamps and the reader need no latch:
+       they are already in the poll.</p>
+    <svg class="schema" viewBox="0 0 660 150" role="img"
+         aria-label="Two pixel frames fill the buffer, then a poll frame carrying the latch lights the strips">
+      <rect class="seg seg-payload" x="10" y="20" width="150" height="40" rx="6"/>
+      <text class="mono" x="85" y="45" text-anchor="middle">03 21 …</text>
+      <rect class="seg seg-payload" x="168" y="20" width="150" height="40" rx="6"/>
+      <text class="mono" x="243" y="45" text-anchor="middle">03 21 …</text>
+      <rect class="seg seg-tag" x="326" y="20" width="238" height="40" rx="6"/>
+      <text class="mono" x="445" y="45" text-anchor="middle">03 11 … 03 22 | 03 10</text>
+      <text class="petit" x="85" y="80" text-anchor="middle">buffer</text>
+      <text class="petit" x="243" y="80" text-anchor="middle">buffer</text>
+      <text class="petit" x="445" y="80" text-anchor="middle">latch + poll</text>
+      <line class="fil" x1="564" y1="40" x2="606" y2="40" marker-end="url(#fl-gris)"/>
+      <circle class="lampe-svg" cx="628" cy="40" r="16"/>
+      <path class="rayon" d="M648 20 L654 14 M648 60 L654 66 M608 20 L602 14 M608 60 L602 66"/>
+      <line class="fil" x1="10" y1="104" x2="600" y2="104" marker-end="url(#fl-gris)"/>
+      <text class="petit" x="305" y="96" text-anchor="middle">one tag counter, shared by every frame that goes out</text>
+      <text class="petit" x="85" y="130" text-anchor="middle">tag 94</text>
+      <text class="petit" x="243" y="130" text-anchor="middle">tag 95</text>
+      <text class="petit" x="445" y="130" text-anchor="middle">tag 96</text>
     </svg>
   </article>
+
+  <p class="aide">That is the whole outbound road. What the <b>LEDs</b> tab does with it:
+     the bench sends one burst per change, and the patterns send one per frame, sixty
+     times a second, with only the strips that actually changed in it. The card reader
+     needs no burst at all, since it is already in the poll.</p>
 </section>
 
 <div class="voile-code" id="voile-code" hidden>

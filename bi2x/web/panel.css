@@ -308,6 +308,24 @@ body {
   background: rgba(255, 95, 86, .14); padding: .1em .4em; border-radius: 4px;
 }
 
+/* -------------------------------------------------------- cabinet patterns */
+
+.motifs { display: flex; flex-wrap: wrap; gap: .4rem; margin-top: .8rem; }
+.motif {
+  margin-left: 0; padding: .34rem .8rem; border: 1px solid var(--bord);
+  border-radius: 6px; background: var(--carte); color: var(--attenue);
+}
+.motif:hover { border-color: var(--trait); color: var(--texte); }
+.motif.actif {
+  color: var(--cyan); border-color: var(--cyan); background: var(--cyan-doux);
+}
+.motif[data-motif=""] { margin-left: auto; }
+
+/* The manual bench is still readable while a pattern plays, but it is not the
+   one driving the strips, so it steps back until Custom hands them over. */
+#banc-led.inactif { opacity: .55; }
+#banc-led.inactif .led-brush, #banc-led.inactif .led-bancs { pointer-events: none; }
+
 /* ----------------------------------------------------------- LED test bench */
 
 .led-brush {
@@ -326,6 +344,25 @@ body {
 .led-brush .intensite b {
   color: var(--texte); font-variant-numeric: tabular-nums; min-width: 3.2ch;
 }
+
+.led-lecteur {
+  display: flex; flex-wrap: wrap; align-items: center; gap: .6rem 1rem;
+  margin-top: .8rem; padding-top: .8rem; border-top: 1px solid var(--bord);
+}
+.led-lecteur .pinceau {
+  display: flex; align-items: center; gap: .5rem;
+  color: var(--attenue); font-size: .85rem;
+}
+.led-lecteur input[type=color] {
+  width: 34px; height: 26px; padding: 0; border: 1px solid var(--bord);
+  border-radius: 6px; background: var(--carte); cursor: pointer;
+}
+.led-lecteur .intensite input[type=range] { width: 110px; accent-color: var(--cyan); }
+.led-lecteur .intensite b {
+  color: var(--texte); font-variant-numeric: tabular-nums; min-width: 3.2ch;
+}
+.led-lecteur .lien { margin-left: 0; }
+.led-point.grand { width: 18px; height: 18px; border-radius: 5px; cursor: default; }
 
 .led-bancs { display: flex; flex-direction: column; gap: .45rem; margin: .5rem 0; }
 .led-banc { display: flex; align-items: flex-start; gap: .6rem; }
@@ -402,7 +439,10 @@ body {
 .champ-size, .champ-offset, .champ-poll {
   color: var(--texte); border-color: var(--texte);
 }
-.champ-crc7, .champ-pixel { color: var(--alerte); border-color: var(--alerte); }
+.champ-crc7, .champ-pixel, .champ-lecteur {
+  color: var(--alerte); border-color: var(--alerte);
+}
+.champ-latch { color: var(--magenta); border-color: var(--magenta); }
 .champ-echoes, .champ-reserve, .champ-zeros {
   color: var(--attenue); border-color: var(--trait);
 }

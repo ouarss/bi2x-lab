@@ -86,6 +86,11 @@ That is 11 RGB zones and 7 button lamps, 18 outputs in total. This list is the o
 panel. Cross it with the connector pinout (CN11 lamps, CN18 LED data lines) in
 [TECHNICAL.md](TECHNICAL.md).
 
+The 11th zone, CARD READER, does not go out the way the other ten do. The ten strip zones are
+pixels; the reader is three bytes of the poll frame's output field. That is how it was found: this
+screen's own four colours are the only combinations those three bytes ever take. See
+[OUTPUTS.md](OUTPUTS.md).
+
 ### ALL mode
 
 Sends the same state to every output at once: `WHITE` to all 11 RGB zones, `ON` to all 7 button
