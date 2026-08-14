@@ -55,9 +55,20 @@ python bi2x/client.py           # console output
 
 The serial port is exclusive. Close all other programs that use the board first.
 
-The image below shows the web panel.
+The panel opens on the live view of the inputs. The shots below were taken with no board attached,
+which is why every reading sits at zero.
 
-![The bi2x-lab web panel, live view](media/web-interface-preview.png)
+![The bi2x-lab web panel, live view of the inputs](media/web-interface-preview.png)
+
+The LEDs tab drives the outputs: the cabinet's own lighting patterns, a colour and an intensity per
+strip, and the card reader LED.
+
+![The LEDs tab: cabinet patterns, the per-strip bench, the card reader](media/led-patterns.png)
+
+The How it works tab is a walk through the protocol itself, from the poll to the latch, with the
+bytes of a real frame at every step.
+
+![The How it works tab, both directions of the protocol step by step](media/how-it-works.png)
 
 The live tools send request frames to poll the board. The request payload is compressed; that
 compression is now implemented in `bi2x/encoder.py`, but the tools still replay recorded requests
