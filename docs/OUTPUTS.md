@@ -141,10 +141,10 @@ replayable outside the game.
 |---|---|---|
 | 0 | off | scene exits |
 | 1 | pulse | never selected by any screen |
-| 2 | pulse, frozen at t=0 | boot: warning screen, Konami logo, BEMANI logo |
+| 2 | pulse, frozen at t=0 | boot: the warning screen and the vendor logos |
 | 3 | pulse | title screen |
 | 4 | rainbow wipe | title screen, second state |
-| 5 | pulse | e-amusement card entry |
+| 5 | pulse | card entry |
 | 6 | 2 s fade | song select, station, skill level select |
 | 7 | rainbow wipe | song select, other state |
 | 8 | 0.25 s fade | in game |

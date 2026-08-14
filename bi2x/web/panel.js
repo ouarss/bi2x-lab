@@ -360,12 +360,38 @@ const readerBrush = () => ({
 const buildReader = () => {
   const slider = document.getElementById('lecteur-intensite')
   const label = document.getElementById('lecteur-intensite-val')
-  const send = () => postLed('/led/reader', readerBrush())
-  slider.addEventListener('input', () => { label.textContent = `${slider.value}%` })
+  const couleur = document.getElementById('lecteur-couleur')
+  const send = () => envoiThrottle('reader', () => postLed('/led/reader', readerBrush()))
+  slider.addEventListener('input', () => {
+    label.textContent = `${slider.value}%`
+    send()
+  })
   slider.addEventListener('change', send)
-  document.getElementById('lecteur-couleur').addEventListener('change', send)
+  couleur.addEventListener('input', send)
+  couleur.addEventListener('change', send)
   document.getElementById('lecteur-eteindre').addEventListener('click', () =>
     postLed('/led/reader', { colour: '#000000', brightness: 0 }))
+}
+
+// An <input type=color> fires `input` while the picker is open and `change` when
+// it closes, but the native Windows picker can close without the page ever seeing
+// a `change`: the colour was then only applied on the next slider move. So follow
+// `input` too, throttled per control, with the last value always sent.
+const SEND_THROTTLE = 120
+const enAttente = new Map()
+
+const envoiThrottle = (cle, fn) => {
+  if (enAttente.has(cle)) {           // a send already went out in this window
+    enAttente.set(cle, fn)            // keep the newest, it goes out at the end
+    return
+  }
+  fn()
+  enAttente.set(cle, null)
+  setTimeout(() => {
+    const dernier = enAttente.get(cle)
+    enAttente.delete(cle)
+    if (dernier) dernier()
+  }, SEND_THROTTLE)
 }
 
 const globalBrush = () => ({
@@ -391,15 +417,24 @@ const buildLedBench = () => {
       `<span class="led-point" title="strip ${s}, LED ${i}"></span>`).join('') +
     '</div></div>').join('')
 
-  // Live intensity read-out, and apply a whole strip when its colour or slider changes.
+  // Live intensity read-out, and apply a whole strip as its colour or slider moves.
+  const appliquerBanc = (cible) => {
+    const banc = cible.closest('.led-banc')
+    if (!banc) return
+    const strip = Number(banc.dataset.strip)
+    envoiThrottle(`strip${strip}`, () =>
+      postLed('/led/strip', { strip, ...stripBrush(banc) }))
+  }
   host.addEventListener('input', (e) => {
-    if (!e.target.classList.contains('led-int')) return
-    e.target.closest('.led-banc').querySelector('.led-int-val').textContent = `${e.target.value}%`
+    if (!e.target.classList.contains('led-col') && !e.target.classList.contains('led-int')) return
+    if (e.target.classList.contains('led-int')) {
+      e.target.closest('.led-banc').querySelector('.led-int-val').textContent = `${e.target.value}%`
+    }
+    appliquerBanc(e.target)
   })
   host.addEventListener('change', (e) => {
     if (!e.target.classList.contains('led-col') && !e.target.classList.contains('led-int')) return
-    const banc = e.target.closest('.led-banc')
-    postLed('/led/strip', { strip: Number(banc.dataset.strip), ...stripBrush(banc) })
+    appliquerBanc(e.target)
   })
 
   // Global: apply the top colour to every strip, mirroring it onto each strip's controls.
