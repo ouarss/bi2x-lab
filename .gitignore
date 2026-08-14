@@ -1,5 +1,6 @@
 bi2x/replay.json
 lab/
+standalone/
 __pycache__/
 *.pyc
 .venv/
