@@ -616,6 +616,23 @@ class Handler(BaseHTTPRequestHandler):
             start_worker(asked)
             return self._send(200, json.dumps({"port": asked}).encode(),
                               "application/json")
+        if route == "/led/reader":
+            length = int(self.headers.get("Content-Length") or 0)
+            try:
+                body = json.loads(self.rfile.read(length) or b"{}")
+            except ValueError:
+                return self._send(400, b'{"error":"json"}', "application/json")
+            r8, g8, b8 = _hex_to_rgb(body.get("colour", "#000000"))
+            level = max(0.0, min(1.0, float(body.get("brightness", 100)) / 100.0))
+            with lock:
+                # The reader takes 8-bit levels, so no quantising here: this is
+                # the one output the strips' 5 bits do not apply to.
+                stop_pattern()
+                reader_state = tuple(min(255, round(c * level)) for c in (r8, g8, b8))
+                outputs_engaged = True
+                answer = {"ok": True, "reader": list(reader_state),
+                          "connected": state["connected"]}
+            return self._send(200, json.dumps(answer).encode(), "application/json")
         if route in ("/led/all", "/led/strip", "/led/clear"):
             length = int(self.headers.get("Content-Length") or 0)
             try:

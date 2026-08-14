@@ -345,6 +345,25 @@ body {
   color: var(--texte); font-variant-numeric: tabular-nums; min-width: 3.2ch;
 }
 
+.led-lecteur {
+  display: flex; flex-wrap: wrap; align-items: center; gap: .6rem 1rem;
+  margin-top: .8rem; padding-top: .8rem; border-top: 1px solid var(--bord);
+}
+.led-lecteur .pinceau {
+  display: flex; align-items: center; gap: .5rem;
+  color: var(--attenue); font-size: .85rem;
+}
+.led-lecteur input[type=color] {
+  width: 34px; height: 26px; padding: 0; border: 1px solid var(--bord);
+  border-radius: 6px; background: var(--carte); cursor: pointer;
+}
+.led-lecteur .intensite input[type=range] { width: 110px; accent-color: var(--cyan); }
+.led-lecteur .intensite b {
+  color: var(--texte); font-variant-numeric: tabular-nums; min-width: 3.2ch;
+}
+.led-lecteur .lien { margin-left: 0; }
+.led-point.grand { width: 18px; height: 18px; border-radius: 5px; cursor: default; }
+
 .led-bancs { display: flex; flex-direction: column; gap: .45rem; margin: .5rem 0; }
 .led-banc { display: flex; align-items: flex-start; gap: .6rem; }
 .led-nom {

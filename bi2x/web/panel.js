@@ -328,6 +328,7 @@ const refreshLed = async () => {
       })
     })
     showFrames(frames)
+    showReader(reader)
     renderPatterns(patterns, pattern, reader)
   } catch { /* server not up yet */ }
 }
@@ -342,6 +343,29 @@ const postLed = async (route, body) => {
     showFrames((await r.json()).frames)
   } catch { /* ignore */ }
   refreshLed()
+}
+
+// The reader LED takes 8-bit levels, so its dot is painted straight from the
+// bytes the server holds, without the strips' 5-bit round trip.
+const showReader = (reader) => {
+  const dot = document.getElementById('lecteur-point')
+  if (dot && reader) dot.style.background = `rgb(${reader[0]},${reader[1]},${reader[2]})`
+}
+
+const readerBrush = () => ({
+  colour: document.getElementById('lecteur-couleur').value,
+  brightness: Number(document.getElementById('lecteur-intensite').value),
+})
+
+const buildReader = () => {
+  const slider = document.getElementById('lecteur-intensite')
+  const label = document.getElementById('lecteur-intensite-val')
+  const send = () => postLed('/led/reader', readerBrush())
+  slider.addEventListener('input', () => { label.textContent = `${slider.value}%` })
+  slider.addEventListener('change', send)
+  document.getElementById('lecteur-couleur').addEventListener('change', send)
+  document.getElementById('lecteur-eteindre').addEventListener('click', () =>
+    postLed('/led/reader', { colour: '#000000', brightness: 0 }))
 }
 
 const globalBrush = () => ({
@@ -684,6 +708,7 @@ buildCode()
 buildLamps()
 refreshLamps()
 buildLedBench()
+buildReader()
 buildPatterns()
 refreshLed()
 loadPorts()

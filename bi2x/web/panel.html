@@ -199,6 +199,20 @@
      colour to all. When the board is connected the matching SetTapeLedData frame is
      sent; either way the built frame is shown below.</p>
   <div class="led-bancs" id="led-bancs"></div>
+
+  <div class="led-lecteur">
+    <span class="led-nom">card reader <i>1 RGB LED</i></span>
+    <label class="pinceau"><input type="color" id="lecteur-couleur" value="#ff0000"></label>
+    <label class="pinceau intensite">
+      <input type="range" id="lecteur-intensite" min="0" max="100" value="100">
+      <b id="lecteur-intensite-val">100%</b></label>
+    <button type="button" class="lien" id="lecteur-eteindre">off</button>
+    <span class="led-point grand" id="lecteur-point"></span>
+  </div>
+  <p class="aide">The reader LED is not a strip: it is three bytes of the output field, red,
+     green and blue, so it travels in the poll frame like the button lamps. Full 8-bit
+     levels, unlike the 5 bits a strip pixel carries.</p>
+
   <div class="led-trame">
     <span class="etiquette-trame">frame sent</span>
     <code id="led-trame-hex">-</code>
