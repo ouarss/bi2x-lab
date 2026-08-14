@@ -30,7 +30,8 @@ the vendor compressor byte for byte.
 
 A pixel is a 15-bit 5-5-5 RGB colour, little-endian, bit 15 clear. The channel order is RGB
 (confirmed with the operator LAMP CHECK: red is `0x7C21`, green `0x07E1`, blue `0x043F`, white
-`0x7FFF`).
+`0x7FFF`). Note that LAMP CHECK never sends a true black: its OFF is `0x0421`, one count on each
+channel.
 
 This cabinet has **8 strips, 428 LEDs**, read from the board's own frames:
 
@@ -209,6 +210,9 @@ replayed or built.
   answers the built poll frames and that the lamps and strips actually light.
 - A byte-exact encoder would need the vendor compressor's hash-chain match finder, which is
   characterised but not ported. It is not needed to drive the hardware.
+- The patterns are rebuilt from their description, not checked against a capture of them running:
+  the capture this project was reversed from is an operator LAMP CHECK, whose pixels only ever take
+  seven test colours. Watching the cabinet is the only way to confirm they look right.
 - Encoding modes 0 and 1 are never seen on this node, so they are untested.
 - Power: CN18 pin 11 (+5V_IN) must supply the 5 V rail for the strips. If it is not connected, the
   data lines change but every strip stays dark.
