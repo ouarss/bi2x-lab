@@ -6,9 +6,10 @@ This page has the outbound direction (host to board): how a frame drives the but
 LED strips, and how the panel sends them. For the inbound direction and the frame basics, see
 [TECHNICAL.md](TECHNICAL.md). For the serial conversation, see [COMMUNICATION.md](COMMUNICATION.md).
 
-Status: solved and driven. The outbound frame format is reversed, `bi2x/encoder.py` builds the
-frames, and the panel drives both the LED strips and the button lamps. What is not yet checked is
-the hardware itself (see the last section).
+Status: solved, driven, and confirmed on the cabinet. The outbound frame format is reversed,
+`bi2x/encoder.py` builds the frames, and the panel drives the LED strips, the button lamps and the
+card reader LED. The strips follow a colour change as it is made, and the rebuilt lighting patterns
+look like the cabinet's own.
 
 ## The outbound frame
 
@@ -202,17 +203,21 @@ project replays jump the tag five times per 128-frame cycle and are answered all
 nothing to be faithful here, so the worker continues from the tag of whatever frame it just sent,
 replayed or built.
 
-## Still open (needs the cabinet)
+## Confirmed on the cabinet
 
-- The frames the panel builds are valid (crc4, crc7, mode 4, obfuscation all check out) and the
-  poll payloads are byte-identical to the game's, latch included, but the compressed stream is not:
-  our compressor is greedy and picks different matches. Confirm on the cabinet that the board
-  answers the built poll frames and that the lamps and strips actually light.
+The frames this project builds are not byte-identical to the vendor's: the payloads are, latch
+included, but the compressed stream is not, since our compressor is greedy and picks different
+matches. The board accepts them anyway. It answers the built poll frames, the strips light and
+follow, and the rebuilt patterns look right on the cabinet.
+
+That settles the one question a capture could not: the recording everything was reversed from is an
+operator LAMP CHECK, whose pixels only ever take seven test colours, so no amount of reading it
+would have told us whether a pattern looks like itself.
+
+## Still open
+
 - A byte-exact encoder would need the vendor compressor's hash-chain match finder, which is
-  characterised but not ported. It is not needed to drive the hardware.
-- The patterns are rebuilt from their description, not checked against a capture of them running:
-  the capture this project was reversed from is an operator LAMP CHECK, whose pixels only ever take
-  seven test colours. Watching the cabinet is the only way to confirm they look right.
+  characterised but not ported. Nothing needs it: the board takes what we send.
 - Encoding modes 0 and 1 are never seen on this node, so they are untested.
 - Power: CN18 pin 11 (+5V_IN) must supply the 5 V rail for the strips. If it is not connected, the
   data lines change but every strip stays dark.
