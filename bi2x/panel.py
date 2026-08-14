@@ -3,8 +3,9 @@
 A worker thread talks to the board on the serial port and decodes the stream; the page
 shows the panel laid out the way it physically is, both analog volumes, START, the four
 BT buttons, the two FX buttons, plus the service inputs and the raw input view.
-The page also drives the outputs: the LED strips (SetTapeLedData frames), and the
-button lamps, whose intensities travel inside the poll frame (SetOutputs).
+The page also drives the outputs: the LED strips (SetTapeLedData frames, then the
+latch that puts them on the strips), and the button lamps, whose intensities
+travel inside the poll frame (SetOutputs).
 
 Only dependency: pyserial. Nothing is published online, everything runs locally.
 
@@ -38,7 +39,7 @@ ALL_INPUTS = BUTTON_ORDER + ["TEST", "SERVICE", "COIN", "HEADPHONE"]
 
 state = {"connected": False, "error": None, "buttons": {n: False for n in BUTTON_ORDER},
         "volL": 0, "volR": 0, "system": {}, "frames": 0, "crc_ok": 0,
-        "rate": 0.0, "channels": [0, 0, 0, 0], "port": None,
+        "rate": 0.0, "channels": [0, 0, 0, 0], "port": None, "led_sent": 0,
         # Same positions on the 0..1023 scale, and revolutions since connection.
         "gradL": 0, "gradR": 0, "turnsL": 0.0, "turnsR": 0.0}
 # Per-input tracking: press count, cumulative hold time, last hold time.
@@ -49,13 +50,16 @@ events = deque(maxlen=400)      # {seq, t, input, active, duration_ms}
 # byte 0 of the 44-byte output field is the master enable, the 7 lamps sit at
 # offsets 17..23 in BUTTON_ORDER. The protocol carries one intensity byte 0..255
 # per output, but these lamps are plain 12 V LEDs, on or off in practice, so the
-# state is a boolean, written as 0xff or 0x00. Until the first lamp command the
+# state is a boolean, written as 0xff or 0x00. Until the first output command the
 # captured polls are replayed unchanged; after it, every poll frame is built here
-# and carries the current lamp state.
+# and carries the current output state.
 LAMP_FIELD_LEN = 44
 LAMP_FIELD_BASE = 17
 lamp_state = {n: False for n in BUTTON_ORDER}
-lamps_engaged = False
+# True once the page has driven any output. From then on the worker builds every
+# poll frame: a replayed poll would reset the lamps, and it cannot carry the LED
+# latch either.
+outputs_engaged = False
 
 # The eight addressable LED outputs (CN18 F0..F7) and their installed LED counts,
 # read from the board's own SetTapeLedData frames during a LAMP CHECK capture.
@@ -65,8 +69,10 @@ STRIP_LEDS = [74, 12, 12, 56, 56, 94, 38, 86]
 led_state = [[(0, 0, 0)] * n for n in STRIP_LEDS]
 led_last_frames = []                # hex of the frames built by the last LED command
 last_poll_raw = None                # on-wire bytes of the last node-0x03 poll response
-outbound = deque()                  # frames waiting for the serial worker to send
-out_tag = 0                         # tag counter for the frames we build ourselves
+# Plaintext payloads waiting to go out. The worker encodes them, so the tag stays
+# one continuous counter shared by the polls and the command frames, which is how
+# the board sees them from the game: ...92, 93, 94(LED), 95(LED), 96(LED), 97...
+outbound = deque()
 _sequence = 0
 _held_since = {}                        # input -> instant of the rising edge
 lock = threading.Lock()
@@ -128,8 +134,9 @@ def start_worker(port):
     stop.clear()
     with lock:
         last_poll_raw = None
+        outbound.clear()
         state.update(connected=False, error=None, port=port, frames=0, crc_ok=0,
-                     rate=0.0)
+                     rate=0.0, led_sent=0)
     worker_thread = threading.Thread(target=serial_loop, args=(port,), daemon=True)
     worker_thread.start()
 
@@ -261,26 +268,32 @@ def serial_loop(port):
         window_start = time.time()
         window_frames = 0
         while not stop.is_set():
-            # Replayed poll by default; once a lamp is driven, a poll built here,
-            # since the lamp state lives in the poll frame and a replayed poll
-            # would reset it on the next cycle.
+            # A cycle, in the order the board sees it from the game: the pixel
+            # commands first, each in its own frame, then the poll, which carries
+            # the latch when a burst just went out. Writing pixels only fills the
+            # board's buffer; 03 22 is what puts them on the strips.
             with lock:
-                payload = lamp_poll_payload() if lamps_engaged else None
-            if payload is None:
-                request = poll[tag & 0x7F]
+                pending = [outbound.popleft() for _ in range(len(outbound))]
+                engaged = outputs_engaged
+            for payload in pending:
+                sp.write(enc.encode_frame(tag, payload))
+                sp.flush()
+                tag = (tag + 1) & 0xFF
+            if engaged:
+                with lock:
+                    poll_plain = poll_payload(latch=bool(pending))
+                request = enc.encode_frame(tag, poll_plain)
             else:
-                request = enc.encode_frame(tag & 0x7F, payload)
+                request = poll[tag & 0x7F]
             sp.write(request)
             sp.flush()
-            tag = (tag + 1) & 0xFF
-            # Send whatever LED/output frames the page has queued, between polls.
-            pending = []
-            with lock:
-                while outbound:
-                    pending.append(outbound.popleft())
-            for frame in pending:
-                sp.write(frame)
-                sp.flush()
+            # Whether the frame was built or replayed, the tag on the wire is its
+            # own; continue from there so the sequence stays unbroken across the
+            # switch from replayed to built polls.
+            tag = (request[2] + 1) & 0xFF
+            if pending:
+                with lock:
+                    state["led_sent"] = state.get("led_sent", 0) + len(pending)
             buffer += sp.read(sp.in_waiting or 1)
             data = bytes(buffer)
             frames, consumed = dec.parse_stream(data)
@@ -348,43 +361,44 @@ def _hex_to_rgb(text):
     return int(text[0:2], 16), int(text[2:4], 16), int(text[4:6], 16)
 
 
-def _led_frame(strip, pixels, offset=0):
-    """Build a SetTapeLedData frame with the next outbound tag. Call under the lock."""
-    global out_tag
-    frame = enc.tape_led_frame(out_tag, strip, pixels, offset)
-    out_tag = (out_tag + 1) & 0xFF
-    return frame
-
-
 def apply_led(colour, brightness, strip=None):
     """Fill one strip (`strip` given) or every strip (`strip` None) with `colour`,
-    scaled by `brightness` (0..100). Updates the shown state, builds the frames, and
-    queues them for the board when it is connected. Returns the frame hex strings.
-    Call under the lock."""
-    global led_last_frames
+    scaled by `brightness` (0..100). Updates the shown state and queues the pixel
+    commands; the worker encodes and sends them, then latches. Returns the hex of
+    the frames as they will go out, tag aside. Call under the lock."""
+    global led_last_frames, outputs_engaged
     r8, g8, b8 = _hex_to_rgb(colour)
     pixel = enc.rgb_to_555(r8, g8, b8, brightness / 100.0)
     targets = range(len(STRIP_LEDS)) if strip is None else [strip]
-    frames = []
+    commands = []
     for s in targets:
         led_state[s] = [pixel] * STRIP_LEDS[s]
-        frames.append(_led_frame(s, led_state[s]))
+        commands += enc.split_pixels(s, led_state[s])
+    payloads = enc.tape_led_payloads(commands)
     if state["connected"]:
-        outbound.extend(frames)
-    led_last_frames = [f.hex() for f in frames]
+        outbound.extend(payloads)
+        outputs_engaged = True
+    # Tag 0 here: what the page shows is the shape of the frame, not the one on
+    # the wire, whose tag is whatever the worker's counter had reached.
+    led_last_frames = [enc.encode_frame(0, p).hex() for p in payloads]
     return led_last_frames
 
 
-def lamp_poll_payload():
-    """SetOutputs plaintext for one poll frame: 03 11 | 44-byte field | 03 10.
+def poll_payload(latch=False):
+    """SetOutputs plaintext for one poll frame:
+
+        03 11 | 44-byte field | [03 22] | 03 10
 
     The trailing 03 10 asks for the input block, so this frame IS the poll: it
-    replaces the replayed one completely. Call under the lock."""
+    replaces the replayed one completely. 03 22 is added on the cycle that
+    follows a burst of pixel commands, and is what makes them visible.
+    Call under the lock."""
     field = bytearray(LAMP_FIELD_LEN)
     field[0] = 0xFF
     for i, name in enumerate(BUTTON_ORDER):
         field[LAMP_FIELD_BASE + i] = 0xFF if lamp_state[name] else 0x00
-    return b"\x03\x11" + bytes(field) + b"\x03\x10"
+    tail = enc.TAPE_LED_LATCH if latch else b""
+    return b"\x03\x11" + bytes(field) + tail + b"\x03\x10"
 
 
 class Handler(BaseHTTPRequestHandler):
@@ -440,9 +454,9 @@ class Handler(BaseHTTPRequestHandler):
         if route == "/lamp/state":
             with lock:
                 body = json.dumps({"lamps": dict(lamp_state),
-                                   "engaged": lamps_engaged,
+                                   "engaged": outputs_engaged,
                                    "connected": state["connected"],
-                                   "frame": enc.encode_frame(0, lamp_poll_payload()).hex()
+                                   "frame": enc.encode_frame(0, poll_payload()).hex()
                                    }).encode()
             return self._send(200, body, "application/json")
         if route == "/led/state":
@@ -488,7 +502,7 @@ class Handler(BaseHTTPRequestHandler):
 
     def do_POST(self):
         """Commands from the page: port selection, LED bench, button lamps."""
-        global lamps_engaged
+        global outputs_engaged
         route = self.path.split("?")[0]
         if route == "/connect":
             length = int(self.headers.get("Content-Length") or 0)
@@ -541,10 +555,10 @@ class Handler(BaseHTTPRequestHandler):
                 for name in lamp_state:
                     lamp_state[name] = on
             # From now on the serial worker builds every poll frame itself.
-            lamps_engaged = True
+            outputs_engaged = True
             answer = {"ok": True, "connected": state["connected"],
                       "lamps": dict(lamp_state),
-                      "frame": enc.encode_frame(0, lamp_poll_payload()).hex()}
+                      "frame": enc.encode_frame(0, poll_payload()).hex()}
         self._send(200, json.dumps(answer).encode(), "application/json")
 
 
@@ -567,9 +581,13 @@ def main():
     except KeyboardInterrupt:
         print("\n[*] stopped")
     finally:
+        # Wait for the worker to reach its `finally` and close the port. Exiting
+        # before that leaves the port held until Windows reclaims it, and the next
+        # run then fails to open it, or opens it into a half-closed state.
         stop.set()
         server.server_close()
-        time.sleep(0.2)
+        if worker_thread and worker_thread.is_alive():
+            worker_thread.join(timeout=2.0)
         os._exit(0)
 
 

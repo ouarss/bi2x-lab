@@ -357,9 +357,12 @@ const buildTabs = () => {
 // ----------------------------------------------------- debug, layer by layer
 
 // The poll answer decoded level by level by the server (/debug). Refreshed a few
-// times per second only: this view is for reading, not for reacting.
+// times per second only: this view is for reading, not for reacting. It starts
+// stopped, and only ever runs while its own tab is open, so it costs nothing
+// until asked for. Nothing extra reaches the board: /debug returns the poll
+// answer the worker has already decoded.
 const DEBUG_PERIOD = 300
-let debugPaused = false
+let debugPaused = true
 
 const fieldSpan = (nom, hexa) =>
   `<span class="champ champ-${nom.toLowerCase()}" data-nom="${nom}">${spaced(hexa.toUpperCase())}</span>`
@@ -432,9 +435,10 @@ const debugLoop = async () => {
 
 const buildDebug = () => {
   const bouton = document.getElementById('pause-debug')
+  document.querySelector('.couches').classList.add('fige')
   bouton.addEventListener('click', () => {
     debugPaused = !debugPaused
-    bouton.textContent = debugPaused ? 'resume' : 'pause'
+    bouton.textContent = debugPaused ? 'start' : 'stop'
     document.querySelector('.couches').classList.toggle('fige', debugPaused)
   })
 }

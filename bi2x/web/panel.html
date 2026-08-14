@@ -217,12 +217,15 @@
   <section class="bloc couches">
     <div class="bloc-titre">
       <h2>Last poll answer, layer by layer</h2>
-      <button type="button" class="lien" id="pause-debug">pause</button>
+      <button type="button" class="lien" id="pause-debug">start</button>
     </div>
     <p class="aide">Each layer explains the layer above it: from the bytes on the
-       wire down to what they mean. Press pause to freeze the view and read it.</p>
+       wire down to what they mean. This view starts stopped: press start to read
+       the newest poll answer three times a second, stop to freeze it. It reads
+       the answer the worker has already decoded, so it asks nothing more of the
+       board either way.</p>
 
-    <p class="debug-vide" id="debug-vide">waiting for a poll answer…</p>
+    <p class="debug-vide" id="debug-vide">stopped, press start</p>
 
     <div id="debug-corps" hidden>
 

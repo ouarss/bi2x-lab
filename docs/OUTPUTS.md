@@ -41,6 +41,30 @@ This cabinet has **8 strips, 428 LEDs**, read from the board's own frames:
 | 2 | 12 | 6 | 38 |
 | 3 | 56 | 7 | 86 |
 
+## The latch: SetTapeLedLatch (`03 22`)
+
+Writing pixels changes nothing on its own. `03 21` fills a buffer on the board; a separate two-byte
+command pushes that buffer onto the strips:
+
+    03 22
+
+It has no argument, and it does not travel in a frame of its own. It rides in the poll frame that
+follows the pixel commands, right before the `03 10`:
+
+    03 11 | 44-byte output field | 03 22 | 03 10
+
+Miss it and the strips simply never change, however many pixel commands go out. One cycle looks like
+this, and the tag is a single counter shared by every outbound frame:
+
+    tag 93   03 11 … 03 10                    poll
+    tag 94   03 21 … 03 21 …                  pixels, several commands per frame
+    tag 95   03 21 … 03 21 …                  more pixels
+    tag 96   03 11 … 03 22 | 03 10            poll, carrying the latch
+    tag 97   03 11 … 03 10                    poll
+
+No frame ever mixes pixel commands with `03 10`, and no payload goes past 263 bytes: a strip that
+would not fit is split on the `offset` field. Only the strips that changed are sent.
+
 ## The button lamps: SetOutputs (`03 11`)
 
 The lamps ride INSIDE the poll frame, not in a frame of their own:
@@ -145,16 +169,23 @@ on/off behaviour seen on the wire. The lamps follow gameplay, not the pattern in
 See `bi2x/panel.py` and the LEDs and Panel tabs of the web view.
 
 - **LED strips**: a colour and an intensity, for all strips at once or for one strip. Each change
-  sends a `SetTapeLedData` frame.
-- **Button lamps**: an on/off switch for each lamp. Because a lamp lives in the poll frame, the
-  server replays the captured polls until the first lamp command, then builds every poll frame
-  itself so the lamp state is not reset on the next cycle.
+  queues pixel commands, packed into frames of at most 263 bytes; the next poll carries the latch.
+- **Button lamps**: an on/off switch for each lamp. A lamp lives in the poll frame, so the server
+  replays the captured polls until the first output command, then builds every poll frame itself:
+  a replayed poll would reset the lamp state, and it cannot carry the LED latch either.
+
+Everything outbound goes through one queue and one tag counter, held by the serial worker, which is
+what the board sees from the game. The board does not seem to require it: the captured polls this
+project replays jump the tag five times per 128-frame cycle and are answered all the same. It costs
+nothing to be faithful here, so the worker continues from the tag of whatever frame it just sent,
+replayed or built.
 
 ## Still open (needs the cabinet)
 
-- The frames the panel builds are valid (crc4, crc7, mode 4, obfuscation all check out), but they
-  are not byte-identical to the vendor's. Confirm on the cabinet that the board answers the built
-  poll frames and that the lamps and strips actually light.
+- The frames the panel builds are valid (crc4, crc7, mode 4, obfuscation all check out) and the
+  poll payloads are byte-identical to the game's, latch included, but the compressed stream is not:
+  our compressor is greedy and picks different matches. Confirm on the cabinet that the board
+  answers the built poll frames and that the lamps and strips actually light.
 - A byte-exact encoder would need the vendor compressor's hash-chain match finder, which is
   characterised but not ported. It is not needed to drive the hardware.
 - Encoding modes 0 and 1 are never seen on this node, so they are untested.
