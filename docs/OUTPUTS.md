@@ -6,10 +6,10 @@ This page has the outbound direction (host to board): how a frame drives the but
 LED strips, and how the panel sends them. For the inbound direction and the frame basics, see
 [TECHNICAL.md](TECHNICAL.md). For the serial conversation, see [COMMUNICATION.md](COMMUNICATION.md).
 
-Status: solved, driven, and confirmed on the cabinet. The outbound frame format is reversed,
-`bi2x/encoder.py` builds the frames, and the panel drives the LED strips, the button lamps and the
-card reader LED. The strips follow a colour change as it is made, and the rebuilt lighting patterns
-look like the cabinet's own.
+Status: solved and driven, and confirmed on the cabinet for everything but the button lamps. The
+outbound frame format is reversed, `bi2x/encoder.py` builds the frames, and the panel drives the LED
+strips, the card reader LED and the button lamps. The strips follow a colour change as it is made,
+the reader lights on command, and the rebuilt lighting patterns look like the cabinet's own.
 
 ## The outbound frame
 
@@ -208,7 +208,8 @@ replayed or built.
 The frames this project builds are not byte-identical to the vendor's: the payloads are, latch
 included, but the compressed stream is not, since our compressor is greedy and picks different
 matches. The board accepts them anyway. It answers the built poll frames, the strips light and
-follow, and the rebuilt patterns look right on the cabinet.
+follow a colour as it is picked, the card reader LED lights on command, and the rebuilt patterns
+look right on the cabinet.
 
 That settles the one question a capture could not: the recording everything was reversed from is an
 operator LAMP CHECK, whose pixels only ever take seven test colours, so no amount of reading it
@@ -216,6 +217,9 @@ would have told us whether a pattern looks like itself.
 
 ## Still open
 
+- The button lamps have not been lit on a cabinet yet. The road there is proven, though: they sit in
+  the same output field as the card reader LED, in the same built poll frame, and that frame is
+  known to arrive and be acted on. What is unproven is only the offsets, 17 to 23.
 - A byte-exact encoder would need the vendor compressor's hash-chain match finder, which is
   characterised but not ported. Nothing needs it: the board takes what we send.
 - Encoding modes 0 and 1 are never seen on this node, so they are untested.

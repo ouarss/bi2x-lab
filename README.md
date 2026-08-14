@@ -11,10 +11,10 @@ protocol. It also has a decoder and an encoder with few dependencies.
 Status:
 
 - The inputs are fully decoded and tested on hardware.
-- The outputs (the button lamps, the LED strips, the card reader LED) are decoded, driven and tested
-  on hardware. The outbound frame format is reversed and `bi2x/encoder.py` builds the frames. The
-  panel also replays the cabinet's own lighting patterns, which look on the cabinet like the ones it
-  plays itself (see [docs/OUTPUTS.md](docs/OUTPUTS.md)).
+- The outputs are decoded and driven. The outbound frame format is reversed and `bi2x/encoder.py`
+  builds the frames. The LED strips and the card reader LED are tested on hardware, and so are the
+  cabinet's own lighting patterns, which the panel replays and which look like the ones it plays
+  itself. The button lamps are not tested yet (see [docs/OUTPUTS.md](docs/OUTPUTS.md)).
 
 The project validated the decoder on 10502 captured frames against a timestamped state log. 100% of
 the payloads are the same byte for byte. 100% of the button states are correct. The header CRC is

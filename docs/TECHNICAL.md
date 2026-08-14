@@ -223,5 +223,6 @@ and the reader are bytes of the poll frame's output field, so they need no frame
 ## Known gaps
 
 - The frames the panel builds are not byte-identical to the vendor's, and the board takes them all
-  the same: inputs, lamps, strips and patterns are confirmed on the cabinet. What is still untested
-  is encoding modes 0 and 1, which this node never uses. See [OUTPUTS.md](OUTPUTS.md).
+  the same: inputs, strips, card reader and patterns are confirmed on the cabinet. Still untested:
+  the button lamps, and encoding modes 0 and 1, which this node never uses. See
+  [OUTPUTS.md](OUTPUTS.md).
