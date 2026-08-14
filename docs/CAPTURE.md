@@ -51,6 +51,10 @@ operator test menu drives them. The `LAMP CHECK` screen in `AUTO` mode lights on
 in a named order, which labels each outbound frame for you. See
 [TEST-MENU.md](TEST-MENU.md) for the screens and the sequence.
 
+That capture is enough to read the output format, but not to check colours against anything: LAMP
+CHECK only ever sends its own handful of test colours. A capture of the game running would be a
+different recording, and this project does not have one.
+
 ## Turn the capture into replay.json
 
 Save the host-to-board bytes to a file, for example `host-to-board.bin`. Then run this from the repo

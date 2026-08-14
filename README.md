@@ -33,6 +33,15 @@ For the protocol, the connectors and the signal map, see [docs/TECHNICAL.md](doc
 | HEADPHONE | jack detection |
 | 56-bit input field, 4 analog channels | this cabinet wires only 7 bits and 2 channels |
 
+## What it drives
+
+| Output | Notes |
+|---|---|
+| 8 LED strips, 428 LEDs | pixel commands plus a latch, without which nothing shows |
+| 7 button lamps | on or off, inside the poll frame |
+| card reader LED | RGB, 8 bits a channel, inside the poll frame too |
+| the cabinet's lighting patterns | rebuilt in `bi2x/patterns.py`, played at 60 frames a second |
+
 ## Run the tools
 
 The decoder has no dependencies. It works offline on a captured stream. The live tools need

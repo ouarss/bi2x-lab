@@ -64,10 +64,18 @@ startup sequence, which is not reversed.
 
 ## The outputs (lamps, LEDs) are not in replay.json
 
-`replay.json` has no line for the outputs. To drive the lamps or the LED strips, the tools build
-outbound frames themselves with `bi2x/encoder.py`. The LED strips are sent as their own frames; the
-button lamps ride inside the poll frame, so once a lamp is driven the panel builds every poll frame
-itself instead of replaying it. See [OUTPUTS.md](OUTPUTS.md).
+`replay.json` has no line for the outputs. To drive them, the tools build outbound frames themselves
+with `bi2x/encoder.py`.
+
+The LED strips are sent as frames of their own, but writing pixels only fills a buffer: what shows
+them is a separate two-byte latch that rides in the next poll frame. The button lamps and the card
+reader LED live in the poll frame too, as bytes of its output field. So driving any output means
+building the poll rather than replaying it: a replayed poll would reset the lamps, and it carries no
+latch. The panel switches over on the first output command and never goes back.
+
+That is also why the poll stops being a plain ping once you drive something. It becomes the frame
+that carries the output state, and the pixel frames slot into the same tag sequence just before it.
+See [OUTPUTS.md](OUTPUTS.md).
 
 ## Summary
 
@@ -77,5 +85,5 @@ itself instead of replaying it. See [OUTPUTS.md](OUTPUTS.md).
 | replay.json = one line per input or output | replay.json = one command, in 128 versions (one per tag), plus 210 startup frames. |
 | The decode happens on the request | The decode happens on the answer: `decoder.py` expands the 234 bytes into buttons and knobs. |
 
-The intelligent work is in the decode of the answer (`decoder.py`), not in the request, which is only
-a replayed ping.
+The intelligent work is in the decode of the answer (`decoder.py`), not in the request, which is a
+replayed ping as long as nothing is being driven.

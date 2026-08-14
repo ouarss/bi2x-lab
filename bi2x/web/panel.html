@@ -149,7 +149,9 @@
       <ul class="sorties lampes" id="lamps"></ul>
       <p class="aide">The lamps are plain 12 V LEDs: on or off. Their state travels
          in the poll frame (SetOutputs): after the first change the server builds
-         every poll frame itself. The frame below is the poll built for tag 00.</p>
+         every poll frame itself. The card reader LED shares that same field, three
+         bytes further along, and is driven from the LEDs tab. The frame below is
+         the poll built for tag 00.</p>
       <div class="led-trame">
         <span class="etiquette-trame">poll frame (tag 00)</span>
         <code id="lamp-trame-hex">-</code>
@@ -661,6 +663,11 @@
       <text class="petit" x="445" y="130" text-anchor="middle">tag 96</text>
     </svg>
   </article>
+
+  <p class="aide">That is the whole outbound road. What the <b>LEDs</b> tab does with it:
+     the bench sends one burst per change, and the patterns send one per frame, sixty
+     times a second, with only the strips that actually changed in it. The card reader
+     needs no burst at all, since it is already in the poll.</p>
 </section>
 
 <div class="voile-code" id="voile-code" hidden>
