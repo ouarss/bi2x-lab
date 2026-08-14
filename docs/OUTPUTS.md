@@ -54,6 +54,92 @@ Each output is one intensity byte (0x00 to 0xFF). Byte 0 of the field is a maste
 FX-L, FX-R. These lamps are plain 12 V drivers, so in practice they are on (`0xFF`) or off (`0x00`),
 even though the byte could carry an intensity.
 
+## What the game itself sends
+
+The game has its own model of the cabinet, and it is not the one this panel uses. What follows
+describes that model. It is useful for two things: driving the strips in a way that looks native,
+and knowing what to expect on the wire when the game is the one talking.
+
+One detail matters for the encoder: the game works in 8 bits per channel throughout. The 5-5-5
+packing happens at the very end, inside the vendor library, just before the frame goes out.
+
+### The 10 logical zones
+
+The game does not address the 8 strips. It paints one 428-LED span cut into 10 named zones. The cut
+lands exactly on the strips this cabinet reports:
+
+| Zone | Name | Offset | LEDs | Strip |
+|---|---|---|---|---|
+| 0 | TITLE | 0 | 74 | 0 |
+| 1 | SPEAKER_L1 | 74 | 12 | 1 |
+| 2 | SPEAKER_R1 | 86 | 12 | 2 |
+| 3 | WING_L | 98 | 56 | 3 |
+| 4 | WING_R | 154 | 56 | 4 |
+| 5 | CONPANE | 210 | 94 | 5 |
+| 6 | SPEAKER_L2 | 304 | 12 | 6, at offset 0 |
+| 7 | SPEAKER_R2 | 316 | 12 | 6, at offset 12 |
+| 8 | WOOFER | 328 | 14 | 6, at offset 24 |
+| 9 | V_UNIT | 342 | 86 | 7 |
+
+One strip carries three zones: strip 6, 38 LEDs, is the two lower speakers plus the woofer. Every
+other zone is a whole strip. So `SetTapeLedData(strip, ...)` maps one to one onto the game's zones,
+strip 6 excepted.
+
+The game also groups the zones four ways, for its own brightness control: TITLE with the upper
+speakers, the wings with the lower speakers, the woofer with the V-UNIT, and the control panel alone.
+
+### The 9 patterns
+
+One pattern runs at a time, picked by whichever screen is up, and it drives the strips and the card
+reader LED together. The only state a pattern keeps is its id and an elapsed-seconds counter, reset
+whenever the id changes, so a pattern is a pure function of elapsed time. That is what makes them
+replayable outside the game.
+
+| Id | Strips | Where it plays |
+|---|---|---|
+| 0 | off | scene exits |
+| 1 | pulse | never selected by any screen |
+| 2 | pulse, frozen at t=0 | boot: warning screen, Konami logo, BEMANI logo |
+| 3 | pulse | title screen |
+| 4 | rainbow wipe | title screen, second state |
+| 5 | pulse | e-amusement card entry |
+| 6 | 2 s fade | song select, station, skill level select |
+| 7 | rainbow wipe | song select, other state |
+| 8 | 0.25 s fade | in game |
+
+Ids 1, 2, 3 and 5 draw the same thing on the strips; they differ on the other outputs only. Ids 4
+and 7 are identical throughout.
+
+There is no separate attract loop. An idle cabinet sits on the title screen, so what you see is
+patterns 3 then 4.
+
+The rainbow wipe (4 and 7) is the easiest one to reproduce: the hue advances 0.05 per frame, a full
+wheel in 20 frames, while `v = clamp(1 - t, 0, 1)` both dims the colour and pulls back the filled
+fraction of each zone over one second.
+
+The pulse (1, 2, 3 and 5) and the two fades (6 and 8) are built from the same handful of drawing
+primitives: a 7-colour rainbow laid out one colour per LED, and segments of a zone filled with a
+gradient weighted either by `abs(sin(pi/2 * phase))` or linearly, composed onto the zone in one of
+six blend modes. The palette behind them is narrow: white and cyan almost everywhere, pink and
+purple on the wings and the control panel.
+
+The card reader LED is a separate channel, `SetIccrLed`, not a strip: one packed RGB888 word, not a
+pixel array. It runs a 240-frame triangle wave, 4 seconds at 60 Hz, peaking at 255 exactly. The
+colour depends on the pattern: green while the reader is free, red while it waits for a card, black
+once the card is read, and on the menu and in-game patterns a cyan breath with the blue cut below
+level 16.
+
+The board takes exactly three outbound commands, and they line up with what this page documents:
+
+| Command | What it drives |
+|---|---|
+| `SetTapeLedData(strip, data)` | the 8 LED strips |
+| `SetIccrLed(rgb)` | the card reader LED, one packed RGB888 word |
+| `SetPlayerButtonLamp(index, on)` | the 7 button lamps, index 0 to 6, boolean |
+
+`SetPlayerButtonLamp` takes a boolean and bounds the index to 6, which matches the 7 lamps and the
+on/off behaviour seen on the wire. The lamps follow gameplay, not the pattern in progress.
+
 ## How the panel drives it
 
 See `bi2x/panel.py` and the LEDs and Panel tabs of the web view.
