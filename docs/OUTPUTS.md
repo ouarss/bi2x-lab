@@ -78,6 +78,23 @@ Each output is one intensity byte (0x00 to 0xFF). Byte 0 of the field is a maste
 FX-L, FX-R. These lamps are plain 12 V drivers, so in practice they are on (`0xFF`) or off (`0x00`),
 even though the byte could carry an intensity.
 
+## The card reader LED: three more bytes of the same field
+
+Offsets 25, 26 and 27 are the red, green and blue of the card reader LED. They are not three
+independent lamps: across a whole capture those three bytes only ever hold five combinations, and
+they are the operator menu's own palette.
+
+| 25, 26, 27 | Colour |
+|---|---|
+| `FF FF FF` | white |
+| `FF 00 00` | red |
+| `00 FF 00` | green |
+| `00 00 FF` | blue |
+| `00 00 00` | off |
+
+So the reader LED is driven inside the poll frame like the lamps, not by a frame of its own, and it
+does take a full 8-bit level per channel: the cabinet breathes it up and down.
+
 ## What the game itself sends
 
 The game has its own model of the cabinet, and it is not the one this panel uses. What follows
@@ -148,10 +165,10 @@ six blend modes. The palette behind them is narrow: white and cyan almost everyw
 purple on the wings and the control panel.
 
 The card reader LED is a separate channel, `SetIccrLed`, not a strip: one packed RGB888 word, not a
-pixel array. It runs a 240-frame triangle wave, 4 seconds at 60 Hz, peaking at 255 exactly. The
-colour depends on the pattern: green while the reader is free, red while it waits for a card, black
-once the card is read, and on the menu and in-game patterns a cyan breath with the blue cut below
-level 16.
+pixel array, which reaches the wire as bytes 25 to 27 of the output field. It runs a 240-frame
+triangle wave, 4 seconds at 60 Hz, peaking at 255 exactly. The colour depends on the pattern: green
+while the reader is free, red while it waits for a card, black once the card is read, and on the
+menu and in-game patterns a cyan breath with the blue cut below level 16.
 
 The board takes exactly three outbound commands, and they line up with what this page documents:
 
@@ -170,6 +187,10 @@ See `bi2x/panel.py` and the LEDs and Panel tabs of the web view.
 
 - **LED strips**: a colour and an intensity, for all strips at once or for one strip. Each change
   queues pixel commands, packed into frames of at most 263 bytes; the next poll carries the latch.
+- **Patterns**: the cabinet's own lighting, rebuilt in `bi2x/patterns.py` and played at 60 frames a
+  second by a thread of its own. Only the strips that changed are sent, so a still pattern costs
+  almost nothing, and a frame is dropped rather than queued if the serial worker falls behind. Card
+  entry also drives the reader LED. Picking Custom, or touching a strip by hand, stops the pattern.
 - **Button lamps**: an on/off switch for each lamp. A lamp lives in the poll frame, so the server
   replays the captured polls until the first output command, then builds every poll frame itself:
   a replayed poll would reset the lamp state, and it cannot carry the LED latch either.

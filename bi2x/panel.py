@@ -30,6 +30,7 @@ import serial                                   # noqa: E402
 from serial.tools import list_ports             # noqa: E402
 import decoder as dec                  # noqa: E402
 import encoder as enc                  # noqa: E402
+import patterns as pat                 # noqa: E402
 
 HERE = os.path.dirname(os.path.abspath(__file__))
 WEB = os.path.join(HERE, "web")
@@ -56,6 +57,11 @@ events = deque(maxlen=400)      # {seq, t, input, active, duration_ms}
 LAMP_FIELD_LEN = 44
 LAMP_FIELD_BASE = 17
 lamp_state = {n: False for n in BUTTON_ORDER}
+# The card reader LED is an RGB output living in the same field, at offsets 25,
+# 26 and 27. Read off the operator LAMP CHECK, where those three bytes take the
+# menu colours together: white, red, green, blue, off.
+READER_FIELD_BASE = 25
+reader_state = (0, 0, 0)
 # True once the page has driven any output. From then on the worker builds every
 # poll frame: a replayed poll would reset the lamps, and it cannot carry the LED
 # latch either.
@@ -73,6 +79,15 @@ last_poll_raw = None                # on-wire bytes of the last node-0x03 poll r
 # one continuous counter shared by the polls and the command frames, which is how
 # the board sees them from the game: ...92, 93, 94(LED), 95(LED), 96(LED), 97...
 outbound = deque()
+
+# Pattern playback. The player is only ever touched by the animation thread;
+# the page sets `pattern_name`, and the thread picks it up on its next frame.
+PATTERN_RATE = 60                   # frames per second, the rate they are written for
+PATTERN_BACKLOG = 8                 # queued payloads past which a frame is dropped
+player = pat.Player()
+pattern_name = None                 # None means the page drives the strips by hand
+pattern_brightness = 100.0
+
 _sequence = 0
 _held_since = {}                        # input -> instant of the rising edge
 lock = threading.Lock()
@@ -397,8 +412,66 @@ def poll_payload(latch=False):
     field[0] = 0xFF
     for i, name in enumerate(BUTTON_ORDER):
         field[LAMP_FIELD_BASE + i] = 0xFF if lamp_state[name] else 0x00
+    field[READER_FIELD_BASE:READER_FIELD_BASE + 3] = bytes(reader_state)
     tail = enc.TAPE_LED_LATCH if latch else b""
     return b"\x03\x11" + bytes(field) + tail + b"\x03\x10"
+
+
+def stop_pattern():
+    """Hand the strips back to the page. Call under the lock.
+
+    The strips keep the last frame drawn; the reader goes dark, since the page
+    has no control over it and a pattern is the only thing that lights it.
+    """
+    global pattern_name, reader_state
+    pattern_name = None
+    reader_state = (0, 0, 0)
+
+
+def animation_loop():
+    """Play the selected pattern, one frame at a time.
+
+    Only the strips that changed are sent, which is what the board sees from the
+    game and keeps a still pattern nearly free. If the serial worker falls behind
+    the frame is dropped rather than queued: late pixels are worse than missing
+    ones, and an unbounded queue would drift further and further behind.
+    """
+    global reader_state
+    period = 1.0 / PATTERN_RATE
+    previous = None                 # last frame sent, to send only what changed
+    playing = None
+    while True:
+        with lock:
+            name = pattern_name
+            level = pattern_brightness
+            ready = state["connected"]
+            backlog = len(outbound)
+        if name != playing:
+            previous = None         # the strips hold something else: send it all
+            playing = name
+        if name is None or not ready:
+            previous = None
+            time.sleep(0.05)
+            continue
+        if backlog > PATTERN_BACKLOG:
+            time.sleep(period)
+            continue
+        player.select(name)
+        pixels, reader = player.frame(period)
+        strips = pat.to_strips(pixels, level / 100.0)
+        commands = []
+        for s in range(len(STRIP_LEDS)):
+            if previous is None or previous[s] != strips[s]:
+                commands += enc.split_pixels(s, strips[s])
+        previous = strips
+        payloads = enc.tape_led_payloads(commands)
+        with lock:
+            for s in range(len(STRIP_LEDS)):
+                led_state[s] = strips[s]
+            if reader is not None:
+                reader_state = tuple(reader)
+            outbound.extend(payloads)
+        time.sleep(period)
 
 
 class Handler(BaseHTTPRequestHandler):
@@ -464,7 +537,13 @@ class Handler(BaseHTTPRequestHandler):
                 strips = [{"leds": n, "pixels": led_state[s]}
                           for s, n in enumerate(STRIP_LEDS)]
                 body = json.dumps({"strips": strips, "connected": state["connected"],
-                                   "frames": led_last_frames}).encode()
+                                   "frames": led_last_frames,
+                                   "pattern": pattern_name,
+                                   "reader": list(reader_state),
+                                   "patterns": [{"name": k, "label": v[0],
+                                                 "strips": v[1]}
+                                                for k, v in pat.PATTERNS.items()],
+                                   }).encode()
             return self._send(200, body, "application/json")
         if route == "/debug":
             with lock:
@@ -501,9 +580,31 @@ class Handler(BaseHTTPRequestHandler):
         self.end_headers()
 
     def do_POST(self):
-        """Commands from the page: port selection, LED bench, button lamps."""
-        global outputs_engaged
+        """Commands from the page: port selection, LED bench, patterns, lamps."""
+        global outputs_engaged, pattern_name, pattern_brightness, reader_state
         route = self.path.split("?")[0]
+        if route == "/led/pattern":
+            length = int(self.headers.get("Content-Length") or 0)
+            try:
+                body = json.loads(self.rfile.read(length) or b"{}")
+            except ValueError:
+                return self._send(400, b'{"error":"json"}', "application/json")
+            name = body.get("name")
+            if name is not None and name not in pat.PATTERNS:
+                return self._send(400, b'{"error":"pattern"}', "application/json")
+            with lock:
+                pattern_name = name
+                pattern_brightness = float(body.get("brightness", 100))
+                if name is None:
+                    # Back to hand control: leave the strips as they are, but stop
+                    # driving the reader, which the page has no control over.
+                    reader_state = (0, 0, 0)
+                else:
+                    outputs_engaged = True
+                connected = state["connected"]
+            return self._send(200, json.dumps({"ok": True, "pattern": name,
+                                               "connected": connected}).encode(),
+                              "application/json")
         if route == "/connect":
             length = int(self.headers.get("Content-Length") or 0)
             try:
@@ -529,6 +630,8 @@ class Handler(BaseHTTPRequestHandler):
                 if not (0 <= strip < len(STRIP_LEDS)):
                     return self._send(400, b'{"error":"range"}', "application/json")
             with lock:
+                # Driving a strip by hand takes the strips back from the pattern.
+                stop_pattern()
                 if route == "/led/clear":
                     frames = apply_led("#000000", 100)
                 else:
@@ -569,6 +672,7 @@ def option(name, fallback, cast=str):
 def main():
     port = pick_port(option("--port", "auto"))
     http = option("--http", 8740, int)
+    threading.Thread(target=animation_loop, daemon=True).start()
     if port is None:
         print("[!] no serial port found, plug the board in, or pass --port")
     else:

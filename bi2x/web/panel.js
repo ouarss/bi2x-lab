@@ -238,6 +238,70 @@ const buildLamps = () => {
     postLamp('/lamp/all', { on: false }))
 }
 
+// ------------------------------------------------------- cabinet patterns
+
+// The patterns come from the server, so the list is whatever it knows how to
+// play. "Custom" is the absence of a pattern: the strips stay as they are and
+// the bench below takes over.
+let currentPattern = null
+
+const renderPatterns = (patterns, active, reader) => {
+  const host = document.getElementById('motifs')
+  if (!host) return
+  if (patterns && !host.dataset.built) {
+    host.innerHTML =
+      patterns.map((p) =>
+        `<button type="button" class="lien motif" data-motif="${p.name}"
+                 title="${p.strips}">${p.label}</button>`).join('') +
+      '<button type="button" class="lien motif" data-motif="">Custom</button>'
+    host.dataset.built = '1'
+  }
+  currentPattern = active ?? null
+  host.querySelectorAll('.motif').forEach((b) => {
+    b.classList.toggle('actif', (b.dataset.motif || null) === currentPattern)
+  })
+  const etat = document.getElementById('motif-etat')
+  if (etat) {
+    const lit = reader && reader.some((c) => c > 0)
+    etat.textContent = currentPattern
+      ? `playing ${currentPattern}${lit ? `, reader ${reader.join(', ')}` : ''}`
+      : 'custom'
+  }
+  document.getElementById('banc-led')?.classList.toggle('inactif', Boolean(currentPattern))
+}
+
+const postPattern = async (name) => {
+  try {
+    await fetch(`${API}/led/pattern`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        name: name || null,
+        brightness: Number(document.getElementById('led-intensite').value),
+      }),
+    })
+  } catch { /* ignore */ }
+  refreshLed()
+}
+
+// While a pattern plays the strips change on their own, so the view has to
+// follow. Only while its tab is open, and ten times a second, which is enough
+// to read: the frames themselves go out at sixty.
+const PATTERN_VIEW_PERIOD = 100
+const patternViewLoop = async () => {
+  if (activeTab === 'leds' && currentPattern) await refreshLed()
+  setTimeout(patternViewLoop, PATTERN_VIEW_PERIOD)
+}
+
+const buildPatterns = () => {
+  const host = document.getElementById('motifs')
+  host.addEventListener('click', (e) => {
+    const bouton = e.target.closest('.motif')
+    if (bouton) postPattern(bouton.dataset.motif)
+  })
+  patternViewLoop()
+}
+
 // ----------------------------------------------------------- LED test bench
 
 // The eight addressable outputs and their LED counts (from the board's own frames).
@@ -254,7 +318,8 @@ const showFrames = (frames) => {
 // Repaint the dots from the server's LED state, so the view matches what was sent.
 const refreshLed = async () => {
   try {
-    const { strips, frames } = await (await fetch(`${API}/led/state`, { cache: 'no-store' })).json()
+    const { strips, frames, pattern, patterns, reader } =
+      await (await fetch(`${API}/led/state`, { cache: 'no-store' })).json()
     strips.forEach((strip, s) => {
       const row = document.querySelector(`.led-rangee[data-strip="${s}"]`)
       if (!row) return
@@ -263,6 +328,7 @@ const refreshLed = async () => {
       })
     })
     showFrames(frames)
+    renderPatterns(patterns, pattern, reader)
   } catch { /* server not up yet */ }
 }
 
@@ -618,6 +684,7 @@ buildCode()
 buildLamps()
 refreshLamps()
 buildLedBench()
+buildPatterns()
 refreshLed()
 loadPorts()
 setInterval(loadPorts, 5000)

@@ -11,9 +11,10 @@ protocol. It also has a decoder and an encoder with few dependencies.
 Status:
 
 - The inputs are fully decoded and tested on hardware.
-- The outputs (the button lamps and the LED strips) are decoded and driven. The outbound frame
-  format is reversed and `bi2x/encoder.py` builds the frames. Driving the hardware is not yet
-  confirmed on the cabinet (see [docs/OUTPUTS.md](docs/OUTPUTS.md)).
+- The outputs (the button lamps, the LED strips, the card reader LED) are decoded and driven. The
+  outbound frame format is reversed and `bi2x/encoder.py` builds the frames. The panel also replays
+  the cabinet's own lighting patterns. Driving the hardware is not yet confirmed on the cabinet
+  (see [docs/OUTPUTS.md](docs/OUTPUTS.md)).
 
 The project validated the decoder on 10502 captured frames against a timestamped state log. 100% of
 the payloads are the same byte for byte. 100% of the button states are correct. The header CRC is
@@ -63,6 +64,7 @@ For how the poll works and what `replay.json` holds, see
 ```
 bi2x/decoder.py   framing, CRCs, deobfuscation, block and record access
 bi2x/encoder.py   the mirror of the decoder: builds outbound frames (lamps, LED strips)
+bi2x/patterns.py  the cabinet's own lighting patterns, rebuilt frame by frame
 bi2x/client.py    console client, shows the inputs live
 bi2x/panel.py     local web server: inputs, LED and lamp control, and a frame debug view
 bi2x/web/         the panel page (HTML, CSS, JS, no build step, no CDN)

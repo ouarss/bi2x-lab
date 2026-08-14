@@ -308,6 +308,24 @@ body {
   background: rgba(255, 95, 86, .14); padding: .1em .4em; border-radius: 4px;
 }
 
+/* -------------------------------------------------------- cabinet patterns */
+
+.motifs { display: flex; flex-wrap: wrap; gap: .4rem; margin-top: .8rem; }
+.motif {
+  margin-left: 0; padding: .34rem .8rem; border: 1px solid var(--bord);
+  border-radius: 6px; background: var(--carte); color: var(--attenue);
+}
+.motif:hover { border-color: var(--trait); color: var(--texte); }
+.motif.actif {
+  color: var(--cyan); border-color: var(--cyan); background: var(--cyan-doux);
+}
+.motif[data-motif=""] { margin-left: auto; }
+
+/* The manual bench is still readable while a pattern plays, but it is not the
+   one driving the strips, so it steps back until Custom hands them over. */
+#banc-led.inactif { opacity: .55; }
+#banc-led.inactif .led-brush, #banc-led.inactif .led-bancs { pointer-events: none; }
+
 /* ----------------------------------------------------------- LED test bench */
 
 .led-brush {
