@@ -439,7 +439,10 @@ body {
 .champ-size, .champ-offset, .champ-poll {
   color: var(--texte); border-color: var(--texte);
 }
-.champ-crc7, .champ-pixel { color: var(--alerte); border-color: var(--alerte); }
+.champ-crc7, .champ-pixel, .champ-lecteur {
+  color: var(--alerte); border-color: var(--alerte);
+}
+.champ-latch { color: var(--magenta); border-color: var(--magenta); }
 .champ-echoes, .champ-reserve, .champ-zeros {
   color: var(--attenue); border-color: var(--trait);
 }

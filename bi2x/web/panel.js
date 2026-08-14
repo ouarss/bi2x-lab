@@ -584,7 +584,13 @@ def knob_delta(new, old):                         # wrapped difference
     return bytes([w & 0xFF, w >> 8])   # little-endian
 payload = (b"\\x03\\x21" + bytes([strip, 0])         # SetTapeLedData
            + offset.to_bytes(2, "little")
-           + bytes([count]) + pixels)`,
+           + bytes([count]) + pixels)
+
+field = bytearray(44)                  # SetOutputs, inside the poll frame
+field[0] = 0xFF                        # master
+field[17:24] = lamps                   # START, BT-A..D, FX-L, FX-R
+field[25:28] = reader_rgb              # card reader LED, 8 bits per channel
+poll = b"\\x03\\x11" + bytes(field) + b"\\x03\\x10"`,
 
   'Pack':
 `wire = compress(payload)   # sliding-window pack (85-byte window);
@@ -601,8 +607,14 @@ head = bytes([node, tag]) + size + bytes([flags & 0xF0])
 flags |= crc4(head)                           # 4-bit header sum in the low nibble
 frame = bytes([0xAA, node, tag]) + size + bytes([flags]) + wire`,
 
-  'Send':
-`sp.write(frame)   # the board unpacks it and lights the LED or the lamp`,
+  'Send, then latch':
+`for payload in pixel_frames:          # fills the board's buffer, shows nothing
+    sp.write(encode_frame(tag, payload))
+    tag = (tag + 1) & 0xFF
+
+latch = b"\\x03\\x22" if pixel_frames else b""
+sp.write(encode_frame(tag, b"\\x03\\x11" + field + latch + b"\\x03\\x10"))
+tag = (tag + 1) & 0xFF                # one counter for every frame that goes out`,
 }
 
 const openCode = (titre) => {
