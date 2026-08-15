@@ -185,6 +185,28 @@ const updateRaw = (state) => {
 // polls it builds itself.
 const LAMPS = ['START', 'BT-A', 'BT-B', 'BT-C', 'BT-D', 'FX-L', 'FX-R']
 
+// The output field as it actually left for the board, read back from /state. This
+// is the ground truth the toggle can only hope for: if the lamp bytes (17..23) read
+// ff here and the lamp still stays dark, the frame is on the wire and the fault is
+// downstream. If out_seq never moves, the worker is not building polls at all.
+const octets = (hex, from, to) =>
+  (hex.slice(from * 2, to * 2).match(/../g) || []).join(' ') || '-'
+let dernierOutSeq = null
+const showEmitted = (state) => {
+  const box = document.getElementById('lamp-emis')
+  if (!box) return
+  const hex = state.out_field || ''
+  if (!state.engaged || !hex) {
+    box.textContent = state.engaged ? 'waiting for the board' : 'replaying recorded polls (no output driven yet)'
+    return
+  }
+  const bouge = dernierOutSeq !== null && state.out_seq !== dernierOutSeq
+  dernierOutSeq = state.out_seq
+  box.innerHTML =
+    `lamps 17..23 = ${octets(hex, 17, 24)}<br>` +
+    `reader 25..27 = ${octets(hex, 25, 28)}   ${bouge ? 'live' : 'idle'} #${state.out_seq}`
+}
+
 const showLampFrame = (frame) => {
   const box = document.getElementById('lamp-trame-hex')
   if (box) box.textContent = frame ? spaced(frame) : '-'
@@ -690,6 +712,9 @@ const render = (state) => {
   el.crc.textContent = state.frames
     ? `${Math.round((100 * state.crc_ok) / state.frames)} %`
     : '-'
+
+  // The wire readout stays live on every tab: it is the whole point of the diagnostic.
+  showEmitted(state)
 
   // Only touch the DOM of the tab on screen: the header above stays live everywhere,
   // but the panel widgets and the raw view are hidden on the other tabs.

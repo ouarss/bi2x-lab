@@ -42,7 +42,10 @@ state = {"connected": False, "error": None, "buttons": {n: False for n in BUTTON
         "volL": 0, "volR": 0, "system": {}, "frames": 0, "crc_ok": 0,
         "rate": 0.0, "channels": [0, 0, 0, 0], "port": None, "led_sent": 0,
         # Same positions on the 0..1023 scale, and revolutions since connection.
-        "gradL": 0, "gradR": 0, "turnsL": 0.0, "turnsR": 0.0}
+        "gradL": 0, "gradR": 0, "turnsL": 0.0, "turnsR": 0.0,
+        # Outbound diagnostic: the output field on the wire, and whether the worker
+        # is building polls (engaged) or still replaying the recorded ones.
+        "engaged": False, "out_field": "", "out_seq": 0}
 # Per-input tracking: press count, cumulative hold time, last hold time.
 tracking = {n: {"presses": 0, "total_ms": 0, "last_ms": 0} for n in ALL_INPUTS}
 events = deque(maxlen=400)      # {seq, t, input, active, duration_ms}
@@ -273,6 +276,8 @@ def serial_loop(port):
         sp.reset_input_buffer()
         with lock:
             state["connected"] = True
+            # Fresh connection: drop any stale wire readout from a previous session.
+            state["out_field"], state["out_seq"] = "", 0
 
         buffer = bytearray()
         tag = 0
@@ -290,6 +295,7 @@ def serial_loop(port):
             with lock:
                 pending = [outbound.popleft() for _ in range(len(outbound))]
                 engaged = outputs_engaged
+                state["engaged"] = engaged
             for payload in pending:
                 sp.write(enc.encode_frame(tag, payload))
                 sp.flush()
@@ -297,6 +303,12 @@ def serial_loop(port):
             if engaged:
                 with lock:
                     poll_plain = poll_payload(latch=bool(pending))
+                    # The output field exactly as it leaves for the board, so the page
+                    # can show the button lamps (17..23) and the reader (25..27) on the
+                    # wire, not just what the toggle intended. out_seq ticks every built
+                    # poll, so a still frozen readout means no built poll is going out.
+                    state["out_field"] = poll_plain[2:2 + LAMP_FIELD_LEN].hex()
+                    state["out_seq"] = state.get("out_seq", 0) + 1
                 request = enc.encode_frame(tag, poll_plain)
             else:
                 request = poll[tag & 0x7F]
@@ -515,6 +527,9 @@ class Handler(BaseHTTPRequestHandler):
                         since = 0
             with lock:
                 snapshot = dict(state)
+                # The true engaged flag, even before the worker's next loop mirrors it
+                # (or when no worker runs at all), so the wire readout labels correctly.
+                snapshot["engaged"] = outputs_engaged
                 snapshot["tracking"] = tracking
                 snapshot["seq"] = _sequence
                 snapshot["events"] = [e for e in events if e["seq"] > since]
