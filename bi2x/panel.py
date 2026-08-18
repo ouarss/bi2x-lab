@@ -65,6 +65,24 @@ lamp_state = {n: False for n in BUTTON_ORDER}
 # menu colours together: white, red, green, blue, off.
 READER_FIELD_BASE = 25
 reader_state = (0, 0, 0)
+# The five looks the cabinet gives the reader LED, replayed from patterns.py:
+# name -> (label, mode, state, busy) for pat.reader_led. Picking one makes the
+# animation thread breathe the LED on its own; the manual brush clears it.
+READER_MODES = {
+    "free": ("Free (green)", 1, pat.READER_FREE, False),
+    "wait": ("Card wait (red)", 1, pat.READER_WAITING, False),
+    "read": ("Card read (off)", 1, pat.READER_READ, False),
+    "menu": ("Menu (cyan)", 2, 0, False),
+    "busy": ("Busy (yellow)", 2, 0, True),
+}
+reader_mode = None      # a READER_MODES key, or None = the manual brush
+
+
+def reader_mode_colour(key, index):
+    """The reader colour of a preset at 60 Hz frame `index`."""
+    _, mode, state, busy = READER_MODES[key]
+    colour = pat.reader_led(index, state, mode, busy)
+    return tuple(colour) if colour else (0, 0, 0)
 # True once the page has driven any output. From then on the worker builds every
 # poll frame: a replayed poll would reset the lamps, and it cannot carry the LED
 # latch either.
@@ -432,12 +450,13 @@ def poll_payload(latch=False):
 def stop_pattern():
     """Hand the strips back to the page. Call under the lock.
 
-    The strips keep the last frame drawn; the reader goes dark, since the page
-    has no control over it and a pattern is the only thing that lights it.
+    The strips keep the last frame drawn; the reader goes dark unless a reader
+    preset is breathing it, since a pattern was then the thing lighting it.
     """
     global pattern_name, reader_state
     pattern_name = None
-    reader_state = (0, 0, 0)
+    if reader_mode is None:
+        reader_state = (0, 0, 0)
 
 
 def animation_loop():
@@ -452,18 +471,28 @@ def animation_loop():
     period = 1.0 / PATTERN_RATE
     previous = None                 # last frame sent, to send only what changed
     playing = None
+    reader_index = 0                # 60 Hz frame counter for the reader presets
     while True:
         with lock:
             name = pattern_name
             level = pattern_brightness
             ready = state["connected"]
             backlog = len(outbound)
+            rmode = reader_mode
         if name != playing:
             previous = None         # the strips hold something else: send it all
             playing = name
         if name is None or not ready:
             previous = None
-            time.sleep(0.05)
+            if rmode is not None and ready:
+                # No pattern: the preset alone breathes the reader, at the 60 Hz
+                # its wave is written for.
+                with lock:
+                    reader_state = reader_mode_colour(rmode, reader_index)
+                reader_index += 1
+                time.sleep(period)
+            else:
+                time.sleep(0.05)
             continue
         if backlog > PATTERN_BACKLOG:
             time.sleep(period)
@@ -480,9 +509,13 @@ def animation_loop():
         with lock:
             for s in range(len(STRIP_LEDS)):
                 led_state[s] = strips[s]
-            if reader is not None:
+            # A reader preset wins over the pattern's own reader drive.
+            if rmode is not None:
+                reader_state = reader_mode_colour(rmode, reader_index)
+            elif reader is not None:
                 reader_state = tuple(reader)
             outbound.extend(payloads)
+        reader_index += 1
         time.sleep(period)
 
 
@@ -555,6 +588,9 @@ class Handler(BaseHTTPRequestHandler):
                                    "frames": led_last_frames,
                                    "pattern": pattern_name,
                                    "reader": list(reader_state),
+                                   "reader_mode": reader_mode,
+                                   "reader_modes": [{"name": k, "label": v[0]}
+                                                    for k, v in READER_MODES.items()],
                                    "patterns": [{"name": k, "label": v[0],
                                                  "strips": v[1]}
                                                 for k, v in pat.PATTERNS.items()],
@@ -597,6 +633,7 @@ class Handler(BaseHTTPRequestHandler):
     def do_POST(self):
         """Commands from the page: port selection, LED bench, patterns, lamps."""
         global outputs_engaged, pattern_name, pattern_brightness, reader_state
+        global reader_mode
         route = self.path.split("?")[0]
         if route == "/led/pattern":
             length = int(self.headers.get("Content-Length") or 0)
@@ -641,11 +678,31 @@ class Handler(BaseHTTPRequestHandler):
             level = max(0.0, min(1.0, float(body.get("brightness", 100)) / 100.0))
             with lock:
                 # The reader takes 8-bit levels, so no quantising here: this is
-                # the one output the strips' 5 bits do not apply to.
+                # the one output the strips' 5 bits do not apply to. The brush
+                # is manual control, so it clears any breathing preset.
+                reader_mode = None
                 stop_pattern()
                 reader_state = tuple(min(255, round(c * level)) for c in (r8, g8, b8))
                 outputs_engaged = True
                 answer = {"ok": True, "reader": list(reader_state),
+                          "connected": state["connected"]}
+            return self._send(200, json.dumps(answer).encode(), "application/json")
+        if route == "/led/reader/mode":
+            length = int(self.headers.get("Content-Length") or 0)
+            try:
+                body = json.loads(self.rfile.read(length) or b"{}")
+            except ValueError:
+                return self._send(400, b'{"error":"json"}', "application/json")
+            asked = body.get("mode")
+            if asked is not None and asked not in READER_MODES:
+                return self._send(400, b'{"error":"mode"}', "application/json")
+            with lock:
+                reader_mode = asked
+                if asked is None:
+                    reader_state = (0, 0, 0)
+                else:
+                    outputs_engaged = True
+                answer = {"ok": True, "mode": reader_mode,
                           "connected": state["connected"]}
             return self._send(200, json.dumps(answer).encode(), "application/json")
         if route in ("/led/all", "/led/strip", "/led/clear"):

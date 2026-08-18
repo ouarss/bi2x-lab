@@ -311,7 +311,7 @@ const postPattern = async (name) => {
 // to read: the frames themselves go out at sixty.
 const PATTERN_VIEW_PERIOD = 100
 const patternViewLoop = async () => {
-  if (activeTab === 'leds' && currentPattern) await refreshLed()
+  if (activeTab === 'leds' && (currentPattern || currentReaderMode)) await refreshLed()
   setTimeout(patternViewLoop, PATTERN_VIEW_PERIOD)
 }
 
@@ -340,7 +340,8 @@ const showFrames = (frames) => {
 // Repaint the dots from the server's LED state, so the view matches what was sent.
 const refreshLed = async () => {
   try {
-    const { strips, frames, pattern, patterns, reader } =
+    const { strips, frames, pattern, patterns, reader,
+            reader_mode: rmode, reader_modes: rmodes } =
       await (await fetch(`${API}/led/state`, { cache: 'no-store' })).json()
     strips.forEach((strip, s) => {
       const row = document.querySelector(`.led-rangee[data-strip="${s}"]`)
@@ -351,6 +352,7 @@ const refreshLed = async () => {
     })
     showFrames(frames)
     showReader(reader)
+    renderReaderModes(rmodes, rmode)
     renderPatterns(patterns, pattern, reader)
   } catch { /* server not up yet */ }
 }
@@ -372,6 +374,30 @@ const postLed = async (route, body) => {
 const showReader = (reader) => {
   const dot = document.getElementById('lecteur-point')
   if (dot && reader) dot.style.background = `rgb(${reader[0]},${reader[1]},${reader[2]})`
+}
+
+// The five reader looks the server can replay (breathing on its own thread);
+// "Manual" is the absence of a preset, the brush above takes over.
+let currentReaderMode = null
+
+const renderReaderModes = (modes, active) => {
+  const host = document.getElementById('lecteur-modes')
+  if (!host) return
+  if (modes && !host.dataset.built) {
+    host.innerHTML =
+      modes.map((m) =>
+        `<button type="button" class="lien motif" data-rmode="${m.name}">${m.label}</button>`).join('') +
+      '<button type="button" class="lien motif" data-rmode="">Manual</button>'
+    host.dataset.built = '1'
+    host.addEventListener('click', (e) => {
+      const bouton = e.target.closest('[data-rmode]')
+      if (bouton) postLed('/led/reader/mode', { mode: bouton.dataset.rmode || null })
+    })
+  }
+  currentReaderMode = active ?? null
+  host.querySelectorAll('[data-rmode]').forEach((b) => {
+    b.classList.toggle('actif', (b.dataset.rmode || null) === currentReaderMode)
+  })
 }
 
 const readerBrush = () => ({
