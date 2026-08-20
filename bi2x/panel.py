@@ -283,13 +283,26 @@ def serial_loop(port):
             state["error"] = f"cannot open {port}: {e}"
         return
     try:
-        for t in init:
-            if stop.is_set():
-                return
-            sp.write(t)
+        # A board that answers a poll is already initialized. Replaying the
+        # startup on a warm board leaves the outputs dead until a FULL power
+        # cycle (mains AND usb: the usb 5V keeps the logic alive), measured
+        # on the cabinet. So: probe first, hand the handshake only to silence.
+        warm = False
+        for _ in range(3):
+            sp.write(poll[0])
             sp.flush()
-            time.sleep(0.004)
-            sp.read(512)
+            time.sleep(0.01)
+            if sp.read(512):
+                warm = True
+                break
+        if not warm:
+            for t in init:
+                if stop.is_set():
+                    return
+                sp.write(t)
+                sp.flush()
+                time.sleep(0.004)
+                sp.read(512)
         time.sleep(0.05)
         sp.reset_input_buffer()
         with lock:
