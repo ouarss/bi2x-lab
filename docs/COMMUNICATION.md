@@ -29,8 +29,12 @@ input.
 
 `replay.json` holds two things:
 
-- `init`: 210 startup frames. The tools send them one time, at the connection. This is the handshake
-  with the board.
+- `init`: 210 startup frames, the handshake with the board. It is only for a freshly powered
+  board, so the tools probe first: they send one poll, and a board that answers is already
+  initialized and is used as-is. The handshake goes out only when the board stays silent.
+  Sending it to an already-initialized board disables the SetOutputs stage (button lamps and
+  reader LED; the inputs and the strips keep working), and only cutting mains AND usb together
+  resets that, because the usb cable's 5V keeps the board's logic alive through a mains cycle.
 - `poll`: 128 entries (keys 0 to 127). Each entry is one poll request of 25 bytes.
 
 ## Why 128 poll requests, not one per input

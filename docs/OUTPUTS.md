@@ -6,10 +6,11 @@ This page has the outbound direction (host to board): how a frame drives the but
 LED strips, and how the panel sends them. For the inbound direction and the frame basics, see
 [TECHNICAL.md](TECHNICAL.md). For the serial conversation, see [COMMUNICATION.md](COMMUNICATION.md).
 
-Status: solved and driven, and confirmed on the cabinet for everything but the button lamps. The
-outbound frame format is reversed, `bi2x/encoder.py` builds the frames, and the panel drives the LED
-strips, the card reader LED and the button lamps. The strips follow a colour change as it is made,
-the reader lights on command, and the rebuilt lighting patterns look like the cabinet's own.
+Status: solved, driven and confirmed on the cabinet, button lamps included. The outbound frame
+format is reversed, `bi2x/encoder.py` builds the frames, and the panel drives the LED strips, the
+card reader LED and the button lamps. The strips follow a colour change as it is made, the reader
+lights on command, the lamps light individually and all together from the panel, and the rebuilt
+lighting patterns look like the cabinet's own.
 
 ## The outbound frame
 
@@ -67,6 +68,18 @@ this, and the tag is a single counter shared by every outbound frame:
 No frame ever mixes pixel commands with `03 10`, and no payload goes past 263 bytes: a strip that
 would not fit is split on the `offset` field. Only the strips that changed are sent.
 
+## The warm-board rule
+
+The startup handshake is only for a freshly powered board. Replayed on a warm board — one that
+already answers polls — it disables the SetOutputs stage: the button lamps and the reader LED stay
+dark while the inputs, the knobs and the strips keep working. The state survives a mains cycle,
+because the usb cable's 5V keeps the board's logic alive: only cutting mains AND usb together
+reboots it. Measured on the cabinet.
+
+So every tool probes before it initializes: a board that answers a poll is already initialized and
+goes straight to the polls, and the handshake is only sent to one that stays silent. A
+startup-time check beats a clean shutdown, because it also runs after a crash.
+
 ## The button lamps: SetOutputs (`03 11`)
 
 The lamps ride INSIDE the poll frame, not in a frame of their own:
@@ -79,6 +92,15 @@ Each output is one intensity byte (0x00 to 0xFF). Byte 0 of the field is a maste
 `0xFF`. The 7 button lamps are at offsets 17 to 23, in this order: START, BT-A, BT-B, BT-C, BT-D,
 FX-L, FX-R. These lamps are plain 12 V drivers, so in practice they are on (`0xFF`) or off (`0x00`),
 even though the byte could carry an intensity.
+
+A full decode of the capture (166,293 SetOutputs fields, every frame CRC-checked) settles three
+facts. Only offsets 0, 17..23 and 25..27 ever take a nonzero value: the rest of the field is zero
+across the whole session. `0xFF` means ON, proven by the reader bytes spelling the operator menu's
+palette in order (white, red, green, blue, off). And the game's resting state is **all seven lamps
+at `0xFF` and the reader white, from the session's first poll**: through boot and attract the lamps
+are simply on, and only the operator LAMP CHECK turns them off to cycle them one by one. The whole
+outbound vocabulary of the session is four commands: `03 11`, `03 10`, `03 21`, `03 22` — there is
+no other output or enable command to discover.
 
 ## The card reader LED: three more bytes of the same field
 
@@ -208,8 +230,10 @@ replayed or built.
 The frames this project builds are not byte-identical to the vendor's: the payloads are, latch
 included, but the compressed stream is not, since our compressor is greedy and picks different
 matches. The board accepts them anyway. It answers the built poll frames, the strips light and
-follow a colour as it is picked, the card reader LED lights on command, and the rebuilt patterns
-look right on the cabinet.
+follow a colour as it is picked, the card reader LED lights on command, the button lamps light from
+the panel's toggles, one at a time and all together, and the rebuilt patterns look right on the
+cabinet. The lamp offsets 17 to 23 and their order are therefore confirmed on the hardware, not
+just on the capture.
 
 That settles the one question a capture could not: the recording everything was reversed from is an
 operator LAMP CHECK, whose pixels only ever take seven test colours, so no amount of reading it
@@ -217,9 +241,6 @@ would have told us whether a pattern looks like itself.
 
 ## Still open
 
-- The button lamps have not been lit on a cabinet yet. The road there is proven, though: they sit in
-  the same output field as the card reader LED, in the same built poll frame, and that frame is
-  known to arrive and be acted on. What is unproven is only the offsets, 17 to 23.
 - A byte-exact encoder would need the vendor compressor's hash-chain match finder, which is
   characterised but not ported. Nothing needs it: the board takes what we send.
 - Encoding modes 0 and 1 are never seen on this node, so they are untested.
